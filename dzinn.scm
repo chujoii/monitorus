@@ -68,8 +68,8 @@
 (define *stderr* (current-error-port))
 
 
-(define *graph-height* 20) ;; fixme     real-hight=40
-(define *graph-width* 100) ;; fixme     real-hight=40
+(define *graph-height* 20) ;; fixme
+(define *graph-width* 100) ;; fixme
 (define *cpu-max-val* 100) ;; fixme     cpu=2 => max-cpu-use=200%
 (define *cpu-quantity* 2) ;; fixme
 (define *bar-width* 2) ;; fixme
@@ -79,14 +79,16 @@
 
 
 
-(define *color-0* #xEFBC69) ;; orange
-(define *color-1* #x02FAFA) ;; aqua
-(define *color-2* #x338433) ;; green
+(define *color-0* #xEFBC69) ;; orange system out
+(define *color-1* #x02FAFA) ;; aqua   user   in
+(define *color-2* #x338433) ;; green  nice
 
 
 (define (scale x in-min in-max out-min out-max) ;; fixme move to battary-scheme
-  (/ (* (- x in-min) (- out-max out-min))
-     (+ (- in-max in-min) out-min)))
+  (let ((dividend (* (- x in-min) (- out-max out-min)))
+	(divisor (+ (- in-max in-min) out-min)))
+  (/ dividend
+     (if (= divisor 0) 1 divisor))))
 
 (define (constrain x a b) ;; fixme move to battary-scheme
   (cond ((< x a) a)
@@ -116,9 +118,13 @@
 
 
 
-(define (cpu-value new-val old-val max-val)
-  (let* ((cpu-val (map (lambda (x) (truncate (scale x 0 (* *cpu-max-val* *cpu-quantity* *refresh-time*) 0 *graph-height*)))
-		       (map - new-val old-val)))
+(define (cpu-prepare new-val old-val)
+  (map - new-val old-val))
+
+
+(define (cpu-scale x  in-min in-max out-min out-max)
+  ;;                                                     ignore in-max
+  (let* ((cpu-val (map (lambda (element) (truncate (scale element in-min (* *cpu-max-val* *cpu-quantity* *refresh-time*) out-min out-max))) x))
 	 (cpu-max (apply + cpu-val)))
     
     (if (> cpu-max *cpu-max-val*) ;; very strange: (+ sys user nice) > 100% -> need correction: change nice value
@@ -140,12 +146,12 @@
 
 
 
-(define (eth0-value new-val old-val max-val)
-  (let* ((eth0-val (map (lambda (x) (truncate (scale x 0 (* *cpu-max-val* *cpu-quantity* *refresh-time*) 0 *graph-height*)))
-			(map - new-val old-val)))
-	 (cpu-max (apply + cpu-val)))
-    
-    net-val))
+(define (eth0-prepare new-val old-val)
+  (map - new-val old-val))
+
+
+(define (eth0-scale x in-min in-max out-min out-max)
+  (map (lambda (element) (truncate (scale element in-min in-max out-min out-max))) x))
 
 
 
@@ -179,7 +185,7 @@
   ;;                rectangle WIDTHxHEIGHT±X±Y
   (if (and (= y 0) (> num 0)) ;; fixme
       ""
-      (let* ((y-round (if (> y *graph-height*) *graph-height* y))
+      (let* ((y-round (if (> y *graph-height*) *graph-height* y)) ;; strange after scale
 	     (y-prev-round (if (> prev-height *graph-height*) *graph-height* prev-height))
 	     (y-shift (- (ceiling (- (/ *graph-height* 2) (/ y-round 2)))
 			 y-prev-round
@@ -221,6 +227,49 @@
 
 
 
+(define (generate-splitted-particle-bar y prev-height num)
+  ;; 
+  ;;^fg(white)^p(1)^r(3x5+0-6)
+  ;;    color  position
+  ;;             1   --> gcpubar -s g -w 100 -h 10 -gs <<1>> -gw 2
+  ;;                rectangle WIDTHxHEIGHT±X±Y
+  ;;
+  ;; num - index number of element in list
+  ;; 
+  (if (and (= y 0) (> num 0)) ;; fixme
+      ""
+      (let* ((y-round (if (> y (/ *graph-height* 2)) (/ *graph-height* 2) y)) ;; strange after scale
+	     (y-prev-round (if (> prev-height *graph-height*) *graph-height* prev-height))
+	     (y-shift (if (= num 0)
+			  (- 0 (ceiling (/ y-round 2)) *bar-vertical-space*)    ;; in
+			  (+ 0 (ceiling (/ y-round 2)) *bar-vertical-space*)))) ;; out
+
+	(format #f "^fg(#~6,'0x)^p(~d)^r(~dx~d~@d~@d)"
+		;;(cond ((< y (* *graph-height* (/ 1 3))) #x777777)
+		;;  ((< y (* *graph-height* (/ 2 3))) #xAAAAAA)
+		;;(else #xFFFFFF))
+		(cond ((= num 0) *color-1*)  ;; in   ;; fixme: color1 for 0; and color0 for 1;
+		      ((= num 1) *color-0*)  ;; out
+		      (else      *color-1*)) ;; in        ;;(ash color 8)
+		(if (= num 0) *bar-horizontal-space* (- *bar-width*))
+		*bar-width*
+		y-round
+		0
+		y-shift))))
+
+
+
+(define (generate-splitted-multi-bar x-list)
+  ;; x-list only pair list: (a b)
+  ;;^fg(white)^p(1)^r(3x5+0-6)
+  ;;    color  position
+  ;;             1   --> gcpubar -s g -w 100 -h 10 -gs <<1>> -gw 2
+  ;;                rectangle WIDTHxHEIGHT±X±Y
+  (define (multi-bar lst previous num)
+    (if (null? lst)
+	'()
+	(cons (generate-splitted-particle-bar (car lst) previous num) (multi-bar (cdr lst) (car lst) (+ num 1)))))
+  (string-join (multi-bar x-list 0 0) ""))
 
 
 
@@ -229,27 +278,58 @@
 
 
 
-(define (mygraph func-generate func-scale func-draw old history-list incremental? tsleep)
-  (let* ((new (func-generate))
+
+
+
+
+
+
+
+(define (mygraph func-read-raw func-prepare func-scale func-draw old-raw history-list incremental? tsleep)
+  ;; func-read-raw return list of numbers
+  ;;               (1073962454 45394130)
+  ;; func-prepare  return difference between current and old value (proc-stat) or return not modified value (temperature)
+  ;;               (input: old value for calculate difference)
+  ;;               (3000 1000)
+  ;; func-scale    convert numbers from real value to value for graph
+  ;;               (3000 1000) => (3 1)
+  ;; func-draw     draw graph
+  ;;               (input value = (3 1))
+  ;;               "^fg(#efbc69)^p(1)^r(2x3+0+10)^fg(#efbc69)^p(1)^r(2x1+0+10)"
+  ;; old           previous list of value before delay
+  ;;               (6927 3174)
+  ;; history-list  history list contains not scalled value
+  ;;               ((6927 3174) (3000 1000))
+  ;; incremental?  how to draw graph
+  ;;               #t or #f
+  ;; tsleep        delay
+
+  (let* ((new-raw (func-read-raw))
+	 (new (func-prepare new-raw old-raw))
 	 (max-val (if incremental?
 		      (max (apply max (map (lambda (x) (apply + x)) history-list)) (apply + new)) ;; max inccrement
 		      (max (apply max (map (lambda (x) (apply max x)) history-list)) (apply max new)))) ;; max from all
-	 (new-history-list (append (cdr history-list) (list (func-scale new old max-val)))))
-    (display "^ib(1)")(map display (map func-draw new-history-list))(display "^fg()")(newline)(force-output *stdout*)
+	 (new-history-list (append (cdr history-list) (list new))))
+    (display "^ib(1)")
+    
+    (if incremental?
+	(map display (map func-draw (map (lambda (x) (func-scale x 0 max-val 0 *graph-height*)) new-history-list)))
+	(map display (map func-draw (map (lambda (x) (func-scale x 0 max-val 0 (/ *graph-height* 2))) new-history-list))))
+    (display "^fg()")
+    (newline)
+    (force-output *stdout*)
     
     (sleep tsleep)
-    (mygraph func-generate func-scale func-draw new new-history-list incremental? tsleep)))
+    (mygraph func-read-raw func-prepare func-scale func-draw new-raw new-history-list incremental? tsleep)))
 
 
 
 
+;(mygraph eth0-stat     eth0-prepare eth0-scale generate-splitted-multi-bar (eth0-stat) (make-list (truncate (/ *graph-width* (+ *bar-width* *bar-horizontal-space*))) (list 0 0)) #f *refresh-time*)
+
+(mygraph proc-stat       cpu-prepare  cpu-scale  generate-incremental-multi-bar (proc-stat) (make-list (truncate (/ *graph-width* (+ *bar-width* *bar-horizontal-space*))) (list 0 0 0)) #t *refresh-time*)
 
 
-
-
-(mygraph proc-stat cpu-value generate-incremental-multi-bar (proc-stat) (make-list (truncate (/ *graph-width* (+ *bar-width* *bar-horizontal-space*))) (list 0 0 0)) #t *refresh-time*)
-
-;(mygraph eth0-stat eth0-value generate-incremental-multi-bar (proc-stat) (make-list (truncate (/ *graph-width* (+ *bar-width* *bar-horizontal-space*))) (list 0 0 0)) #f *refresh-time*)
 
 
 
