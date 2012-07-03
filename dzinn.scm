@@ -129,7 +129,7 @@
 
 
 
-(define *ps-cpu-show* 1) ;; number to show ;; fixme
+(define *ps-cpu-show* 1) ;; number process to show ;; fixme
 (define *ps-cpu-above* 3) ;; show only processes above (in %) ;; fixme
 
 (define *cpu-quantity* 2) ;; fixme
@@ -151,7 +151,7 @@
 
 (define *number-of-bar* (truncate (/ (- *graph-width* *bar-horizontal-space*) (+ *bar-width* *bar-horizontal-space*)))) ;; ideally if (truncate fubar)===(fubar) else you can see half-bar width space
 
-(define *cpu-max-val* (* 100 *cpu-quantity* *refresh-time*)) ;; if num-of-cpu=2 => max-cpu-use=200%
+(define *cpu-max-val* (* 100 *cpu-quantity*)) ;; if num-of-cpu=2 => max-cpu-use=200%     final value need divide into *refresh-time* (see cpu-diff-prepare)
 
 
 
@@ -183,13 +183,12 @@
 	    (search-first-string-in-list (cdr lst) str)))))
 
 
+(define (runtime)  ;; fixme move to battary-scheme
+  ((lambda (rt) (+ (car rt) (/ (cdr rt) 1000000)))
+   (gettimeofday)))
+    
 
-
-(define (diff-prepare new-val old-val)
-  (map - new-val old-val))
-
-
-(define (index-of-max lst)
+(define (index-of-max lst)  ;; fixme move to battary-scheme
   (define (indmax im mm lst counter)
     (if (null? lst)
 	im
@@ -200,17 +199,16 @@
 
 
 
+
+(define (diff-prepare new-val old-val)
+  (map - (cdr new-val) (cdr old-val))) ;; cdr because for simple prepare function not need "runtime" element
+
+
+
 (define (cpu-diff-prepare new-val old-val)
-  ;; fixme need store real-refresh-time: (+ sys user nice) > 100% (because real-refresh-time === sleep+processing =/= *refresh-time*) -> need correction: change one of cpu value: if for example decrease "nice==0" => -1   need decrease max of cpu value
-  (let* ((cpu-val (map - new-val old-val))
-	 (cpu-sum (apply + cpu-val))) ;; out-max already iclude sum of *bar-vertical-space*
-    
-    (if (> cpu-sum *cpu-max-val*)
-	(let* ((cpu-overfilled-index (index-of-max cpu-val))
-	       (cpu-overfilled       (list-ref cpu-val cpu-overfilled-index)))
-	  (list-set! cpu-val cpu-overfilled-index (- cpu-overfilled (- cpu-sum *cpu-max-val*)))))
-    
-    cpu-val))
+  (let* ((cpu-val (map - new-val old-val)))
+    (map (lambda (x) (/ x (car cpu-val)))
+	 (cdr cpu-val))))
 
 
 
@@ -237,10 +235,11 @@
   ;;      (ps-irq (list-ref cpu-stat 5)) ;; irq: servicing interrupts
   ;;      (ps-softirq (list-ref cpu-stat 6))) ;; softirq: servicing softirqs)))
   
-  ;; return (sys user nice)
+  ;; return (runtime sys user nice)
   (let ((p-s (list-head (map string->number (map match:substring (list-matches "[0-9]+" (first-line-of-file "/proc/stat"))))
 			3)))
-    (list (list-ref p-s 2)    ;; sys
+    (list (runtime)           ;; time
+	  (list-ref p-s 2)    ;; sys
 	  (list-ref p-s 0)    ;; user
 	  (list-ref p-s 1)))) ;; nice
 
@@ -258,9 +257,10 @@
 
 
 
-(define (eth0-stat) ;; fixme fixme fixme need wlan0, ...
+(define (eth0-stat) ;; fixme need wlan0, ...
   ;; return (in out)
-  (list (car (map string->number (map match:substring (list-matches "[0-9]+" (first-line-of-file "/sys/class/net/eth0/statistics/rx_bytes")))))   ;; rx
+  (list (runtime)
+	(car (map string->number (map match:substring (list-matches "[0-9]+" (first-line-of-file "/sys/class/net/eth0/statistics/rx_bytes")))))   ;; rx
 	(car (map string->number (map match:substring (list-matches "[0-9]+" (first-line-of-file "/sys/class/net/eth0/statistics/tx_bytes"))))))) ;; tx
 
 
@@ -273,14 +273,14 @@
 
 
 
-(define (sda-stat) ;; fixme fixme fixme need sda, sdb, ...
+(define (sda-stat) ;; fixme need sda, sdb, ...
   (let ((sda (map string->number (map match:substring (list-matches "[^ ]+" (search-first-string-in-list (read-lines-list "/proc/diskstats") "sda"))))))
-    (list (list-ref sda 3) (list-ref sda 7))))
+    (list (runtime) (list-ref sda 3) (list-ref sda 7))))
 
 
-(define (swap-stat) ;; fixme fixme fixme need sda, sdb, ...
+(define (swap-stat) ;; fixme need sda, sdb, ...
   (let ((swap (map string->number (map match:substring (list-matches "[^ ]+" (search-first-string-in-list (read-lines-list "/proc/diskstats") "sda2"))))))
-    (list (list-ref swap 5) (list-ref swap 9))))
+    (list (runtime) (list-ref swap 5) (list-ref swap 9))))
 
 
 
@@ -312,11 +312,12 @@
   ;;    color  position
   ;;             1   --> gcpubar -s g -w 100 -h 10 -gs <<1>> -gw 2
   ;;                rectangle WIDTHxHEIGHT±X±Y
-  (if (and (= y 0) (> num 0)) ;; fixme
-      (list "" prev-height)
+  (if (and (= y 0) (> num 0))
+      
+      (list "" prev-height) ;; do not draw small column
+      
       (let* ((y-shift (- (ceiling (- (/ *graph-height* 2) (/ y 2)))
 			 prev-height)))
-	
 	(list (format #f "^fg(#~6,'0x)^p(~d)^r(~dx~d~@d~@d)"
 		      ;;(cond ((< y (* *graph-height* (/ 1 3))) #x777777)
 		      ;;  ((< y (* *graph-height* (/ 2 3))) #xAAAAAA)
@@ -330,8 +331,8 @@
 		      y
 		      0
 		      y-shift)
-	      (if (= y 0) 0 (+ prev-height y *bar-vertical-space*))))))
-
+;	      (if (= y 0) 0 (+ prev-height y *bar-vertical-space*))))))
+	      (+ prev-height y *bar-vertical-space*)))))
 
 
 (define (generate-incremental-multi-bar x-list)
@@ -367,8 +368,8 @@
   ;;
   ;; num - index number of element in list
   ;; 
-  (if (and (= y 0) (> num 0)) ;; fixme
-      ""
+  (if (and (= y 0) (> num 0))
+      ""  ;; do not draw small column
       (let* ((y-shift (if (= num 0)
 			  (- 0 (floor (/ (+ y *bar-vertical-space*) 2)))    ;; in
 			  (+ 0 (ceiling (/ (+ y *bar-vertical-space*) 2)))))) ;; out
@@ -377,7 +378,7 @@
 		;;(cond ((< y (* *graph-height* (/ 1 3))) #x777777)
 		;;  ((< y (* *graph-height* (/ 2 3))) #xAAAAAA)
 		;;(else #xFFFFFF))
-		(cond ((= num 0) *color-1*)  ;; in   ;; fixme: color1 for 0; and color0 for 1;
+		(cond ((= num 0) *color-1*)  ;; in   ;; fixme: strange color1 for 0; and color0 for 1;
 		      ((= num 1) *color-0*)  ;; out
 		      (else      *color-1*)) ;; in        ;;(ash color 8)
 		(if (= num 0) *bar-horizontal-space* (- *bar-width*))
@@ -440,7 +441,7 @@
 		      (max (apply max (map (lambda (x) (apply + x)) history-list)) (apply + new)) ;; max inccrement
 		      (max (apply max (map (lambda (x) (apply max x)) history-list)) (apply max new)))) ;; max from all
 	 (real-height (if incremental?
-			  (- *graph-height* (* *bar-vertical-space* (- (length old-raw) 1))) ;; 1#2#3 number of "#" === (- length 1) === 2 ;; fixme: need only count the distance between the non-zero columns, but the resultant height of the columns (especially the small columns), depends on the distance between the columns. Otherwise, the top will often be an empty space, even when wholly loaded, due to rounding error
+			  (- *graph-height* (* *bar-vertical-space* (- (length old-raw) 1))) ;; 1#2#3 number of "#" === (- length 1) === 2 ;; fixme: need only count the distance between the non-zero columns (short columns are not shown), but the resultant height of the columns (especially the small columns), depends on the distance between the columns. Otherwise, the top will often be an empty space, even when wholly loaded, due to rounding error
 			  (truncate (/ (- *graph-height* *bar-vertical-space*) 2))))
 	 (new-history-list (append (cdr history-list) (list new))))
     
@@ -480,12 +481,12 @@
     (dzinn new-lst)))
 
 
-(dzinn (list (list mytext *color-3* " sda[")
-	     (list mygraph sda-stat diff-prepare simple-scale generate-splitted-multi-bar    (sda-stat) (make-list *number-of-bar* (list 0 0))   #f)
-	     (list mytext *color-3* "] eth0[")
-	     (list mygraph eth0-stat diff-prepare simple-scale generate-splitted-multi-bar    (eth0-stat) (make-list *number-of-bar* (list 0 0))   #f)
-	     (list mytext *color-3* "] cpu[")
-	     (list mygraph cpu-stat cpu-diff-prepare  cpu-scale  generate-incremental-multi-bar (cpu-stat) (make-list *number-of-bar* (list 0 0 0)) #t)
-	     (list mytext *color-3* "]")
+(dzinn (list ;(list mytext *color-3* " sda[")
+	     ;(list mygraph sda-stat diff-prepare simple-scale generate-splitted-multi-bar    (sda-stat) (make-list *number-of-bar* (list 0 0 0))   #f)
+	     ;(list mytext *color-3* "] eth0[")
+	     ;(list mygraph eth0-stat diff-prepare simple-scale generate-splitted-multi-bar    (eth0-stat) (make-list *number-of-bar* (list 0 0 0))   #f)
+	     ;(list mytext *color-3* "] cpu[")
+	     (list mygraph cpu-stat cpu-diff-prepare  cpu-scale  generate-incremental-multi-bar (cpu-stat) (make-list *number-of-bar* (list 0 0 0 0)) #t)
+	     ;(list mytext *color-3* "]")
 	     ))
 
