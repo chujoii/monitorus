@@ -80,7 +80,7 @@
 
 ;; ---------------------- start config ----------------------
 
-(define *refresh-time* 1)
+(define *refresh-time* 3)
 
 (define *graph-width* 61) ;; (+ (* (/ time-what-you-want-to-see-in-graph *refresh-time*) (+ *bar-width* *bar-horizontal-space*)) *bar-horizontal-space*) = (+ (* (/ 60 3) (+ 2 1)) 1) = 61
 (define *graph-height* 19) ;; check *bar-vertical-space*
@@ -201,6 +201,20 @@
 
 
 
+(define (nc net-host net-port) ;; fixme move to battary-scheme
+  (define (cycle-read stream result)
+    (let ((line (read-line stream)))
+      (if (eof-object? line)
+	  result
+	  (cycle-read stream (append result (list line)))))) ;; fixme append -> cons
+  
+  (let ((s (socket PF_INET SOCK_STREAM 0)))
+    (connect s AF_INET (inet-pton AF_INET net-host) net-port)
+    (let ((res (cycle-read s '())))
+      (close-port s)
+      res)))
+
+
 
 (define (diff-prepare new-val old-val)
   (map - (cdr new-val) (cdr old-val))) ;; cdr because for simple prepare function not need "runtime" element
@@ -224,12 +238,14 @@
 (define (top-stat)
   ;; fixme need use *ps-cpu-above*
   ;; fixme maybe need use another behavior http://forums.anandtech.com/showthread.php?t=297729
-  (map (lambda (x) (string-pad-right (string-cut x 5 15) 10))
-       (list-head (string-split (system-with-output-to-string (string-append "ps --no-headers -A -o pcpu,comm --sort=-pcpu | head -n " (number->string *ps-cpu-show*))) #\newline) *ps-cpu-show*)))
+  (string-join 
+   (map (lambda (x) (string-pad-right (string-cut x 5 15) 10))
+	(list-head (string-split (system-with-output-to-string (string-append "ps --no-headers -A -o pcpu,comm --sort=-pcpu | head -n " (number->string *ps-cpu-show*))) #\newline) *ps-cpu-show*))
+   " "))
 
 
 (define (pulseaudio-stat)
-  ;; fixme: the function is full circles and so eats the whole processor.
+  ;; fixme: need rewrite because the function is full of circles and so eats the whole 1% of processor time (^_^)
   (define (draw-circle diameter color-f)
     (format #f "^ib(1)^fg(#~6,'0x)^c(~d~@d)"
 	    color-f
@@ -274,7 +290,30 @@
 			 (draw-circle d3 *color-4*)
 			 (format #f "^p(-~d)" (+ d4 shift))
 			 (draw-circle-withsegment d4 volume *color-4* *color-0*)
-			 (format #f "^p(~d)" (+ d4 shift)))))))
+			 (format #f "^p(~d)" (+ d3 shift))))))) ;; fixme d3 or ? for shift from center of circle
+
+
+(define (thermo-stat)
+  ;;  (string-split (system-with-output-to-string "cat /sys/devices/platform/coretemp.*/temp*_input /sys/class/thermal/thermal_zone*/temp") #\newline));; this command call "cat" evry seconds 
+  ;; (system-with-output-to-string "sensors") show not all thermosensors
+  (string-join
+   (map (lambda (x) (format #f "~a~2,'0d"
+			    (generate-vertical-bar (round (scale x 0 100000 0 *graph-height*)) (if (< x 50000) *color-1* *color-0*))
+			    (round (/ x 1000))))
+	(map string->number
+		     (list (first-line-of-file "/sys/devices/platform/coretemp.0/temp2_input")
+			   (first-line-of-file "/sys/devices/platform/coretemp.0/temp3_input")
+			   (first-line-of-file "/sys/class/thermal/thermal_zone0/temp")
+			   (first-line-of-file "/sys/class/thermal/thermal_zone1/temp")
+			   (first-line-of-file "/sys/class/thermal/thermal_zone2/temp")
+			   (first-line-of-file "/sys/class/thermal/thermal_zone3/temp")
+			   (string-append (list-ref (string-split (car (nc "127.0.0.1" 7634)) #\|) 3) "000")
+			   ;; "000" because the rest of the temperature sensors give the values ​​in mili-Celsius
+			   (first-line-of-file "/sys/class/thermal/thermal_zone4/temp"))))
+	""))
+
+  
+
 
 
 
@@ -337,29 +376,24 @@
 
 
 
-(define (generate-simple-bar x-list)
+(define (generate-vertical-bar y color)
   ;; 
   ;;^fg(white)^p(1)^r(3x5+0-6)
   ;;    color  position
   ;;             1   --> gcpubar -s g -w 100 -h 10 -gs <<1>> -gw 2
   ;;                rectangle WIDTHxHEIGHT±X±Y
-  (let* ((y (apply + x-list))
-	 (y (if (> y *graph-height*) *graph-height* y))
-	 (y-shift (truncate (- (/ *graph-height* 2) (/ y 2)))))
-    
-    (format #f "^fg(#~6,'0x)^p(~d)^r(~dx~d~@d~@d)"
-	    (cond ((< y (* *graph-height* (/ 1 3))) #x777777)
-		  ((< y (* *graph-height* (/ 2 3))) #xAAAAAA)
-		  (else #xFFFFFF))
-	    *bar-horizontal-space*
-	    *bar-width*
-	    y
-	    0
-	    y-shift)))
+  (format #f "^fg(#~6,'0x)^p(~d)^r(~dx~d~@d~@d)"
+	  color
+	  *bar-horizontal-space*
+	  *bar-width*
+	  y
+	  0
+	  (ceiling (- (/ *graph-height* 2) (/ y 2)))))
+	  
 
 
 (define (generate-incremental-particle-bar y prev-height num)
-  ;; 
+  ;;
   ;;^fg(white)^p(1)^r(3x5+0-6)
   ;;    color  position
   ;;             1   --> gcpubar -s g -w 100 -h 10 -gs <<1>> -gw 2
@@ -468,7 +502,6 @@
 
 
 
-
 (define (make-graph func-read-raw func-prepare func-scale func-draw old-raw history-list incremental?)
   ;; func-read-raw return list of numbers
   ;;               (1073962454 45394130)
@@ -539,15 +572,19 @@
 
 (dzinn 
  (list 
-  (list make-dynamic-text *color-3* pulseaudio-stat)
-  (list make-text *color-3* " (sda")
-  (list make-graph sda-stat diff-prepare simple-scale generate-splitted-multi-bar (sda-stat) (make-list *number-of-bar* (list 0 0 0)) #f)
-  (list make-text *color-3* ") (eth0")
-  (list make-graph eth0-stat diff-prepare simple-scale generate-splitted-multi-bar (eth0-stat) (make-list *number-of-bar* (list 0 0 0)) #f)
-  (list make-text *color-3* ") (cpu")
+  (list make-text *color-3* "-[cpu")
   (list make-graph cpu-stat cpu-diff-prepare cpu-scale generate-incremental-multi-bar (cpu-stat) (make-list *number-of-bar* (list 0 0 0 0)) #t)
-  (list make-text *color-3* ")")
+  (list make-text *color-3* "]-[eth0")
+  (list make-graph eth0-stat diff-prepare simple-scale generate-splitted-multi-bar (eth0-stat) (make-list *number-of-bar* (list 0 0 0)) #f)
+  (list make-text *color-3* "]-[sda")
+  (list make-graph sda-stat diff-prepare simple-scale generate-splitted-multi-bar (sda-stat) (make-list *number-of-bar* (list 0 0 0)) #f)
+  (list make-text *color-3* "]-[")
   (list make-dynamic-text *color-3* top-stat)
+  (list make-text *color-3* "]-[toC")
+  (list make-dynamic-text *color-3* thermo-stat)
+  (list make-text *color-3* "]-[snd")
+  (list make-dynamic-text *color-3* pulseaudio-stat)
+  (list make-text *color-3* "]-")
   ))
 
 
