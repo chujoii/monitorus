@@ -2,7 +2,7 @@
 !#
 ; coding: utf-8
 
-;;;; dzinn.scm ---  generate text graph for dzen
+;;;; dzinn.scm --- gives way to the data to dzen
 
 
 
@@ -82,11 +82,12 @@
 
 (define *refresh-time* 1)
 
-(define *graph-width* 50) ;; (* (/ 60secondsinminute *refresh-time*) (+ *bar-width* *bar-horizontal-space*)) = 60
+(define *graph-width* 61) ;; (+ (* (/ time-what-you-want-to-see-in-graph *refresh-time*) (+ *bar-width* *bar-horizontal-space*)) *bar-horizontal-space*) = (+ (* (/ 60 3) (+ 2 1)) 1) = 61
 (define *graph-height* 19) ;; check *bar-vertical-space*
 (define *bar-width* 2)
 (define *bar-horizontal-space* 1)
 (define *bar-vertical-space* 1) ;; check *graph-height*
+(define *font-size* 8)
 
 ;; you can set *graph-height* less that real graph height: real_dzen_height=20 then set *graph-height*=18 for 1 pixel border
 ;; (define *horizontal-border* 0)
@@ -129,8 +130,8 @@
 
 
 
-(define *ps-cpu-show* 1) ;; number process to show ;; fixme
-(define *ps-cpu-above* 3) ;; show only processes above (in %) ;; fixme
+(define *ps-cpu-show* 2) ;; number process to show
+(define *ps-cpu-above* 5) ;; show only processes above (in %) ;; fixme: not used
 
 (define *cpu-quantity* 2) ;; fixme
 
@@ -138,6 +139,7 @@
 (define *color-1* #x439595) ;; aqua   user   in
 (define *color-2* #x357d35) ;; green  nice
 (define *color-3* #x999999) ;; gray 
+(define *color-4* #x000000) ;; black
 
 
 ;; ---------------------- end config ----------------------
@@ -224,6 +226,56 @@
   ;; fixme maybe need use another behavior http://forums.anandtech.com/showthread.php?t=297729
   (map (lambda (x) (string-pad-right (string-cut x 5 15) 10))
        (list-head (string-split (system-with-output-to-string (string-append "ps --no-headers -A -o pcpu,comm --sort=-pcpu | head -n " (number->string *ps-cpu-show*))) #\newline) *ps-cpu-show*)))
+
+
+(define (pulseaudio-stat)
+  ;; fixme: the function is full circles and so eats the whole processor.
+  (define (draw-circle diameter color-f)
+    (format #f "^ib(1)^fg(#~6,'0x)^c(~d~@d)"
+	    color-f
+	    diameter 360))
+
+  (define (draw-circle-withsegment diameter degree color-b color-f)
+    ;; ^ib(1)^c(26+360)^p(-26)^fg(#aecf96)^c(26-120)^p(-26)^fg(#000000)^c(26-60)
+    ;;          circle  shift   color      segment   shift  color       segment
+    (format #f "^ib(1)^fg(#~6,'0x)^c(~d~@d)^p(-~d)^fg(#~6,'0x)^c(~d~@d)^p(-~d)^fg(#~6,'0x)^c(~d~@d)" ;; text degree  "^p(-~d)^fg(#~6,'0x)~3,' d"
+	    color-b ;; background color
+	    diameter 360 ;; background full circle
+
+	    diameter ;; shift to left
+	    color-f ;; degree color
+	    diameter (- -90 degree) ;; degree segment
+	    
+	    diameter ;; shift to left
+	    (if (> degree 100) color-f color-b) ;;  degree or hide segment
+	    diameter (+ -90 degree) ;; hide segment
+	    ;;diameter ;; shift to left
+	    ;;color-b
+	    ;;degree
+	    ))
+  
+  ;; fixme need use dB?
+  (let ((snd (string-split (system-with-output-to-string "pacmd list-sinks 0") #\newline)))
+    (if (null? (search-first-string-in-list snd "muted: no"))
+	"x" ;; mute
+	(let* ((volume (round (scale (string->number (list-ref (map match:substring (list-matches "[^ %]+" (search-first-string-in-list snd "volume: 0:"))) 2)) 0 100 0 90)))
+	       (shift (* 2 *bar-horizontal-space*))
+	       (d0 *graph-height*)
+	       (d1 (- d0 (* 2 shift)))
+	       (d2 (- d1 (* 2 shift)))
+	       (d3 (- d2 (* 2 shift)))
+	       (d4 (- d3 (* 2 shift))))
+	  (string-append (draw-circle-withsegment d0 volume *color-4* *color-0*)
+			 (format #f "^p(-~d)" (+ d1 shift))
+			 (draw-circle d1 *color-4*)
+			 (format #f "^p(-~d)" (+ d2 shift))
+			 (draw-circle-withsegment d2 volume *color-4* *color-0*)
+			 (format #f "^p(-~d)" (+ d3 shift))
+			 (draw-circle d3 *color-4*)
+			 (format #f "^p(-~d)" (+ d4 shift))
+			 (draw-circle-withsegment d4 volume *color-4* *color-0*)
+			 (format #f "^p(~d)" (+ d4 shift)))))))
+
 
 
 (define (cpu-stat)
@@ -417,7 +469,7 @@
 
 
 
-(define (mygraph func-read-raw func-prepare func-scale func-draw old-raw history-list incremental?)
+(define (make-graph func-read-raw func-prepare func-scale func-draw old-raw history-list incremental?)
   ;; func-read-raw return list of numbers
   ;;               (1073962454 45394130)
   ;; func-prepare  return difference between current and old value (cpu-stat) or return not modified value (temperature)
@@ -447,17 +499,21 @@
     
     (map display (map func-draw (map (lambda (x) (func-scale x 0 max-val 0 real-height)) new-history-list)))
 
-    (list mygraph func-read-raw func-prepare func-scale func-draw new-raw new-history-list incremental?)))
+    (list make-graph func-read-raw func-prepare func-scale func-draw new-raw new-history-list incremental?)))
 
 
 
 
 
 
-(define (mytext color str)
+(define (make-text color str)
   (format #t "^fg(#~6,'0x)~a" color str)
-  (list mytext color str))
+  (list make-text color str))
 
+
+(define (make-dynamic-text color func)
+  (format #t "^fg(#~6,'0x)~a" color (func))
+  (list make-dynamic-text color func))
 
 
 
@@ -481,12 +537,18 @@
     (dzinn new-lst)))
 
 
-(dzinn (list ;(list mytext *color-3* " sda[")
-	     ;(list mygraph sda-stat diff-prepare simple-scale generate-splitted-multi-bar    (sda-stat) (make-list *number-of-bar* (list 0 0 0))   #f)
-	     ;(list mytext *color-3* "] eth0[")
-	     ;(list mygraph eth0-stat diff-prepare simple-scale generate-splitted-multi-bar    (eth0-stat) (make-list *number-of-bar* (list 0 0 0))   #f)
-	     ;(list mytext *color-3* "] cpu[")
-	     (list mygraph cpu-stat cpu-diff-prepare  cpu-scale  generate-incremental-multi-bar (cpu-stat) (make-list *number-of-bar* (list 0 0 0 0)) #t)
-	     ;(list mytext *color-3* "]")
-	     ))
+(dzinn 
+ (list 
+  (list make-dynamic-text *color-3* pulseaudio-stat)
+  (list make-text *color-3* " (sda")
+  (list make-graph sda-stat diff-prepare simple-scale generate-splitted-multi-bar (sda-stat) (make-list *number-of-bar* (list 0 0 0)) #f)
+  (list make-text *color-3* ") (eth0")
+  (list make-graph eth0-stat diff-prepare simple-scale generate-splitted-multi-bar (eth0-stat) (make-list *number-of-bar* (list 0 0 0)) #f)
+  (list make-text *color-3* ") (cpu")
+  (list make-graph cpu-stat cpu-diff-prepare cpu-scale generate-incremental-multi-bar (cpu-stat) (make-list *number-of-bar* (list 0 0 0 0)) #t)
+  (list make-text *color-3* ")")
+  (list make-dynamic-text *color-3* top-stat)
+  ))
+
+
 
