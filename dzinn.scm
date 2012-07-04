@@ -55,9 +55,9 @@
 
 ;; ---------------------- start config ----------------------
 
-(define *refresh-time* 3)
+(define *refresh-time* 3) ;; in seconds
 
-(define *graph-width* 61) ;; (+ (* (/ time-interval-that-you-want-to-see-from-the-chart *refresh-time*) (+ *bar-width* *bar-horizontal-space*)) *bar-horizontal-space*) = (+ (* (/ 60 3) (+ 2 1)) 1) = 61
+(define *graph-width* 61) ;; (+ (* (/ time-interval-that-you-want-to-see-from-the-chart *refresh-time*) (+ *bar-width* *bar-horizontal-space*)) *bar-horizontal-space*) =for-example= (+ (* (/ 60 3) (+ 2 1)) 1) = 61
 (define *graph-height* 19) ;; check *bar-vertical-space*
 (define *bar-width* 2)
 (define *bar-height* 2)
@@ -266,6 +266,37 @@
   
 
 
+
+(define (mem-stat)
+  (let* ((mem-info (read-lines-list "/proc/meminfo"))
+	 (mem-names (list "MemTotal"
+			  "MemFree"
+			  "Buffers"
+			  "Cached"
+			  "SwapTotal"
+			  "SwapFree"))
+	 (mem-numbers (map (lambda (x) (string->number(car (map match:substring (list-matches "[0-9]+" (search-first-string-in-list mem-info x))))))
+			   mem-names))
+	 
+	 (mem-total   (list-ref mem-numbers 0))
+	 (mem-free    (list-ref mem-numbers 1))
+	 (mem-buffers (list-ref mem-numbers 2))
+	 (mem-cached  (list-ref mem-numbers 3))
+	 (swap-total  (list-ref mem-numbers 4))
+	 (swap-free   (list-ref mem-numbers 5))
+	 (mem-graph-height (- *graph-height* (* 3 *bar-vertical-space*)))
+	 (swap-graph-height (- *graph-height* (* 2 *bar-vertical-space*))))
+    
+    (string-append
+     (generate-incremental-multi-bar (list (truncate (scale (- mem-total mem-free mem-buffers mem-cached) 0 mem-total  0 mem-graph-height))
+					   (truncate (scale mem-buffers                                   0 mem-total  0 mem-graph-height))
+					   (truncate (scale mem-cached                                    0 mem-total  0 mem-graph-height))
+					   (truncate (scale mem-free                                      0 mem-total  0 mem-graph-height))))
+     (generate-incremental-multi-bar (list (truncate (scale (- swap-total swap-free)   0 swap-total  0 swap-graph-height))
+					   (truncate (scale swap-free                  0 swap-total  0 swap-graph-height)))))))
+  
+
+
 (define (pulseaudio-stat)
   ;; fixme: need rewrite because the function is full of circles and so eats the whole 1% of processor time (most likely it's because calling shell, pacmd and regexp), and rounding is not consistent with other design elements
   (define (draw-circle diameter color-f)
@@ -435,7 +466,7 @@
 		      (cond ((= num 0) *color-0*)  ;; system 
 			    ((= num 1) *color-1*)  ;; user
 			    ((= num 2) *color-2*)  ;; nice
-			    (else      *color-0*)) ;; system        ;;(ash color 8)
+			    (else      *color-3*)) ;; system        ;;(ash color 8)
 		      (if (= num 0) *bar-horizontal-space* (- *bar-width*))
 		      *bar-width*
 		      y
@@ -609,8 +640,10 @@
   (list make-graph eth0-stat diff-prepare simple-scale generate-splitted-multi-bar (eth0-stat) (make-list *number-of-bar* (list 0 0 0)) #f)
   (list make-text *color-3* "]-[sda")
   (list make-graph sda-stat diff-prepare simple-scale generate-splitted-multi-bar (sda-stat) (make-list *number-of-bar* (list 0 0 0)) #f)
-  (list make-text *color-3* "]-[")
+  (list make-text *color-3* "]-[top")
   (list make-dynamic-text *color-3* top-stat)
+  (list make-text *color-3* "]-[mem")
+  (list make-dynamic-text *color-3* mem-stat)
   (list make-text *color-3* "]-[t")
   (list make-dynamic-text *color-3* thermo-stat)
   (list make-text *color-3* "]-[snd")
