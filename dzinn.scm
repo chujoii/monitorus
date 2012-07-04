@@ -37,7 +37,7 @@
 
 ;;; Usage:
 
-;; nice -n 19 project/dzinn/dzinn.scm | dzen2 -x 1000 -y 0 -w 300 -h 20 -ta l -bg black -dock -fn snap:size=8 &
+;; nice -n 19 ./dzinn.scm | dzen2 -x 705 -y 0 -w 575 -h 21 -ta l -bg black -dock -fn "Mono:size=7" &
 ;;  while true; do cat graph.txt ; sleep 1; done | dzen2 -x 1150 -y 30 -w 100 -h 100 -bg black -ta l -dock
 ;; cat graph.txt | dzen2 -p
 ;; ^ib(1)^p(-98)^fg(blue)^r(20x10)^fg(orange)^p(3)^r(40x10-50+10)^p(4)
@@ -87,7 +87,7 @@
 (define *bar-width* 2)
 (define *bar-horizontal-space* 1)
 (define *bar-vertical-space* 1) ;; check *graph-height*
-(define *font-size* 8)
+(define *font-horizontal-size* 5)
 
 ;; you can set *graph-height* less that real graph height: real_dzen_height=20 then set *graph-height*=18 for 1 pixel border
 ;; (define *horizontal-border* 0)
@@ -135,12 +135,26 @@
 
 (define *cpu-quantity* 2) ;; fixme
 
+(define *list-thermal*
+  ;; (sensor scale permissible_limit maximum_limit)
+  ;; if sensor = number - number of element in result of command hddtemp: "nc localhost 7634"
+  ;; if sentor = "filename" - file contains one number
+  (list (list "/sys/devices/platform/coretemp.0/temp2_input" 1000 50 100)
+	(list "/sys/devices/platform/coretemp.0/temp3_input" 1000 50 100)
+	(list "/sys/class/thermal/thermal_zone0/temp"        1000 50 100)   
+	(list "/sys/class/thermal/thermal_zone1/temp"        1000 50 100)
+	(list "/sys/class/thermal/thermal_zone2/temp"        1000 50 100)
+	(list "/sys/class/thermal/thermal_zone3/temp"        1000 50 100)
+	(list 3                                                 1 50  60)
+	(list "/sys/class/thermal/thermal_zone4/temp"        1000 50 100)))
+
+
 (define *color-0* #xb17e37) ;; orange system out
 (define *color-1* #x439595) ;; aqua   user   in
 (define *color-2* #x357d35) ;; green  nice
-(define *color-3* #x999999) ;; gray 
-(define *color-4* #x000000) ;; black
-
+(define *color-3* #x999999) ;; gray   text
+(define *color-4* #x000000) ;; black  background
+(define *color-5* #xffffff) ;; white  limit
 
 ;; ---------------------- end config ----------------------
 
@@ -294,23 +308,22 @@
 
 
 (define (thermo-stat)
-  ;;  (string-split (system-with-output-to-string "cat /sys/devices/platform/coretemp.*/temp*_input /sys/class/thermal/thermal_zone*/temp") #\newline));; this command call "cat" evry seconds 
-  ;; (system-with-output-to-string "sensors") show not all thermosensors
+  ;;  (string-split (system-with-output-to-string "cat /sys/devices/platform/coretemp.*/temp*_input /sys/class/thermal/thermal_zone*/temp") #\newline));; this command call "shell" with "cat" evry seconds 
+  ;; (system-with-output-to-string "sensors") show not all thermo-sensors
   (string-join
-   (map (lambda (x) (format #f "~a~2,'0d"
-			    (generate-vertical-bar (round (scale x 0 100000 0 *graph-height*)) (if (< x 50000) *color-1* *color-0*))
-			    (round (/ x 1000))))
-	(map string->number
-		     (list (first-line-of-file "/sys/devices/platform/coretemp.0/temp2_input")
-			   (first-line-of-file "/sys/devices/platform/coretemp.0/temp3_input")
-			   (first-line-of-file "/sys/class/thermal/thermal_zone0/temp")
-			   (first-line-of-file "/sys/class/thermal/thermal_zone1/temp")
-			   (first-line-of-file "/sys/class/thermal/thermal_zone2/temp")
-			   (first-line-of-file "/sys/class/thermal/thermal_zone3/temp")
-			   (string-append (list-ref (string-split (car (nc "127.0.0.1" 7634)) #\|) 3) "000")
-			   ;; "000" because the rest of the temperature sensors give the values ​​in mili-Celsius
-			   (first-line-of-file "/sys/class/thermal/thermal_zone4/temp"))))
-	""))
+   (map (lambda (x) (let ((thermo
+			    (round (/ (string->number (if (number? (car x))
+							  (list-ref (string-split (car (nc "127.0.0.1" 7634)) #\|) (car x))
+							  (first-line-of-file (car x))))
+				      (cadr x)))))
+		      (format #f "~a~2,'0d"
+			      (generate-vertical-bar (round (scale thermo 0 100 0 *graph-height*))
+						     (cond ((< thermo (caddr x))  *color-1*)   ;; permissible_limit
+							   ((> thermo (cadddr x)) *color-5*)   ;; maximum_limit
+							   (else                  *color-0*))) ;; normal
+			      thermo)))
+	*list-thermal*)
+   ""))
 
   
 
@@ -570,6 +583,8 @@
     (dzinn new-lst)))
 
 
+
+
 (dzinn 
  (list 
   (list make-text *color-3* "-[cpu")
@@ -580,12 +595,13 @@
   (list make-graph sda-stat diff-prepare simple-scale generate-splitted-multi-bar (sda-stat) (make-list *number-of-bar* (list 0 0 0)) #f)
   (list make-text *color-3* "]-[")
   (list make-dynamic-text *color-3* top-stat)
-  (list make-text *color-3* "]-[toC")
+  (list make-text *color-3* "]-[t")
   (list make-dynamic-text *color-3* thermo-stat)
   (list make-text *color-3* "]-[snd")
   (list make-dynamic-text *color-3* pulseaudio-stat)
   (list make-text *color-3* "]-")
   ))
+
 
 
 
