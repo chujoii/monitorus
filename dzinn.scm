@@ -2,7 +2,7 @@
 !#
 ; coding: utf-8
 
-;;;; dzinn.scm --- gives way to the data to dzen
+;;;; dzinn.scm --- provides a way for data to dzen
 
 
 
@@ -31,23 +31,21 @@
 
 
 
-;;; Keywords: graph plot dzen monitoring system parameter cpu net disk
+;;; Keywords: graph plot dzen monitoring system cpu net disk top process temperature sensor
 
 
 
 ;;; Usage:
 
 ;; nice -n 19 ./dzinn.scm | dzen2 -x 705 -y 0 -w 575 -h 21 -ta l -bg black -dock -fn "Mono:size=7" &
-;;  while true; do cat graph.txt ; sleep 1; done | dzen2 -x 1150 -y 30 -w 100 -h 100 -bg black -ta l -dock
+;; while true; do cat graph.txt ; sleep 1; done | dzen2 -x 1150 -y 30 -w 100 -h 100 -bg black -ta l -dock
 ;; cat graph.txt | dzen2 -p
-;; ^ib(1)^p(-98)^fg(blue)^r(20x10)^fg(orange)^p(3)^r(40x10-50+10)^p(4)
-;; gcpubar -s g -w 100 -h 10 -gs 1 -gw 2  | dzen2 -x 0 -y 700 -w 120 -h 30 -ta l -bg black
 
 
 
 ;;; History:
 
-;; Version 0.1 was created at 2012.february.03
+;; Version 0.1 was created at 2012.may.30
 
 
 
@@ -55,41 +53,20 @@
 
 
 
-
-
-
-
-;; gkrellm
-;; /proc/diskstats
-;; /proc/2976/net/dev
-;; /proc/vmstat
-;; /proc/stat
-;; /proc/2976/net/route
-
-(use-modules (ice-9 format))
-(use-modules (ice-9 regex)) ;; for match:substring
-(load "../battery-scheme/file-contents.scm")
-(load "../battery-scheme/string.scm")
-(load "../battery-scheme/system-cmd.scm")
-
-(define *stdout* (current-output-port))
-(define *stderr* (current-error-port))
-
-
-
-
 ;; ---------------------- start config ----------------------
 
 (define *refresh-time* 3)
 
-(define *graph-width* 61) ;; (+ (* (/ time-what-you-want-to-see-in-graph *refresh-time*) (+ *bar-width* *bar-horizontal-space*)) *bar-horizontal-space*) = (+ (* (/ 60 3) (+ 2 1)) 1) = 61
+(define *graph-width* 61) ;; (+ (* (/ time-interval-that-you-want-to-see-from-the-chart *refresh-time*) (+ *bar-width* *bar-horizontal-space*)) *bar-horizontal-space*) = (+ (* (/ 60 3) (+ 2 1)) 1) = 61
 (define *graph-height* 19) ;; check *bar-vertical-space*
 (define *bar-width* 2)
 (define *bar-horizontal-space* 1)
 (define *bar-vertical-space* 1) ;; check *graph-height*
-(define *font-horizontal-size* 5)
+;; (define *font-horizontal-size* 5)
 
-;; you can set *graph-height* less that real graph height: real_dzen_height=20 then set *graph-height*=18 for 1 pixel border
+;; to emulate the frame around the graph, you can set 
+;; the height of the graph *graph-height* is less than the actual height of the graph in dzen
+;; For example, if real_dzen_height = 20, then set the *graph-height* = 18 for a single pixel frame
 ;; (define *horizontal-border* 0)
 ;; (define *vertical-border* 0)
 
@@ -97,7 +74,7 @@
 ;; if *graph-height* is even, then set *bar-vertical-space* to even
 ;; because:
 ;;
-;; for splitted graph with *bar-vertical-space* = even (0):
+;; for splitted graph with *bar-vertical-space* = even (for example 0):
 ;;
 ;; if *graph-height* is even (8)     |    if odd (7)
 ;;      A                            |         B          C          D
@@ -112,7 +89,7 @@
 ;; normal graph                      |    strange graph ??????? (D - *bar-vertical-space*===1 not 0)
 ;;
 ;;
-;; for splitted graph with *bar-vertical-space* = odd (1):
+;; for splitted graph with *bar-vertical-space* = odd (for example 1):
 ;;
 ;; if  *graph-height*  is even (8)   |    if odd (7)
 ;;     A           B          C      |         D
@@ -126,19 +103,21 @@
 ;; 8 ???????    LLLLLLL    LLLLLLL   |
 ;;                                   |
 ;; strange graph ???????             |    normal graph
-;; (C *bar-vertical-space* = 2 not 1)
+;; (C *bar-vertical-space*=2, but not 1)
 
 
 
-(define *ps-cpu-show* 2) ;; number process to show
-(define *ps-cpu-above* 5) ;; show only processes above (in %) ;; fixme: not used
+(define *ps-cpu-show* 2)  ;; number of top process to show
+(define *ps-cpu-above* 5) ;; show only processes above (in %) ;; fixme: need to use
 
-(define *cpu-quantity* 2) ;; fixme
+(define *cpu-quantity* 2) ;; fixme: it is necessary to calculate automatically
 
 (define *list-thermal*
   ;; (sensor scale permissible_limit maximum_limit)
-  ;; if sensor = number - number of element in result of command hddtemp: "nc localhost 7634"
-  ;; if sentor = "filename" - file contains one number
+  ;; if sensor = number - number of fields in the results of the hddtemp's output
+  ;;         for example: "nc localhost 7634" -> "|/dev/sda|mysuperdisk|47|C|" ->
+  ;;                                             0       1       2     >3<  4
+  ;; if sentor = "string" - file that contains the number
   (list (list "/sys/devices/platform/coretemp.0/temp2_input" 1000 50 100)
 	(list "/sys/devices/platform/coretemp.0/temp3_input" 1000 50 100)
 	(list "/sys/class/thermal/thermal_zone0/temp"        1000 50 100)   
@@ -159,15 +138,27 @@
 ;; ---------------------- end config ----------------------
 
 
+(use-modules (ice-9 format))
+(use-modules (ice-9 regex)) ;; for match:substring
+(load "../battery-scheme/file-contents.scm")
+(load "../battery-scheme/string.scm")
+(load "../battery-scheme/system-cmd.scm")
+
+(define *stdout* (current-output-port))
+(define *stderr* (current-error-port))
 
 
 
 
 
 
-(define *number-of-bar* (truncate (/ (- *graph-width* *bar-horizontal-space*) (+ *bar-width* *bar-horizontal-space*)))) ;; ideally if (truncate fubar)===(fubar) else you can see half-bar width space
 
-(define *cpu-max-val* (* 100 *cpu-quantity*)) ;; if num-of-cpu=2 => max-cpu-use=200%     final value need divide into *refresh-time* (see cpu-diff-prepare)
+
+
+
+(define *number-of-bar* (truncate (/ (- *graph-width* *bar-horizontal-space*) (+ *bar-width* *bar-horizontal-space*)))) ;; Ideally, if (truncate fubar)===(fubar), otherwise, due to rounding at the end of the schedule will see the empty space
+
+(define *cpu-max-val* (* 100 *cpu-quantity*)) ;; if num-of-cpu=2 => max-cpu-val=200%     the final value is also dependent on the time of accumulation (see cpu-diff-prepare)
 
 
 
@@ -220,7 +211,7 @@
     (let ((line (read-line stream)))
       (if (eof-object? line)
 	  result
-	  (cycle-read stream (append result (list line)))))) ;; fixme append -> cons
+	  (cycle-read stream (append result (list line)))))) ;; fixme? append -> cons ?
   
   (let ((s (socket PF_INET SOCK_STREAM 0)))
     (connect s AF_INET (inet-pton AF_INET net-host) net-port)
@@ -231,13 +222,13 @@
 
 
 (define (diff-prepare new-val old-val)
-  (map - (cdr new-val) (cdr old-val))) ;; cdr because for simple prepare function not need "runtime" element
+  (map - (cdr new-val) (cdr old-val))) ;; "cdr" because for simple prepare function not necessary "runtime" element
 
 
 
 (define (cpu-diff-prepare new-val old-val)
   (let* ((cpu-val (map - new-val old-val)))
-    (map (lambda (x) (/ x (car cpu-val)))
+    (map (lambda (x) (/ x (car cpu-val)));; (car cpu-val) === accumulation time
 	 (cdr cpu-val))))
 
 
@@ -250,8 +241,8 @@
 
 
 (define (top-stat)
-  ;; fixme need use *ps-cpu-above*
-  ;; fixme maybe need use another behavior http://forums.anandtech.com/showthread.php?t=297729
+  ;; fixme: need to use *ps-cpu-above*
+  ;; fixme: probably better to use a different algorithm http://forums.anandtech.com/showthread.php?t=297729
   (string-join 
    (map (lambda (x) (string-pad-right (string-cut x 5 15) 10))
 	(list-head (string-split (system-with-output-to-string (string-append "ps --no-headers -A -o pcpu,comm --sort=-pcpu | head -n " (number->string *ps-cpu-show*))) #\newline) *ps-cpu-show*))
@@ -259,12 +250,12 @@
 
 
 (define (pulseaudio-stat)
-  ;; fixme: need rewrite because the function is full of circles and so eats the whole 1% of processor time (^_^)
+  ;; fixme: need rewrite because the function is full of circles and so eats the whole 1% of processor time (most likely it's because calling shell, pacmd and regexp), and rounding is not consistent with other design elements
   (define (draw-circle diameter color-f)
     (format #f "^ib(1)^fg(#~6,'0x)^c(~d~@d)"
 	    color-f
 	    diameter 360))
-
+  
   (define (draw-circle-withsegment diameter degree color-b color-f)
     ;; ^ib(1)^c(26+360)^p(-26)^fg(#aecf96)^c(26-120)^p(-26)^fg(#000000)^c(26-60)
     ;;          circle  shift   color      segment   shift  color       segment
@@ -284,7 +275,7 @@
 	    ;;degree
 	    ))
   
-  ;; fixme need use dB?
+  ;; fixme need to use dB?
   (let ((snd (string-split (system-with-output-to-string "pacmd list-sinks 0") #\newline)))
     (if (null? (search-first-string-in-list snd "muted: no"))
 	"x" ;; mute
@@ -308,8 +299,8 @@
 
 
 (define (thermo-stat)
-  ;;  (string-split (system-with-output-to-string "cat /sys/devices/platform/coretemp.*/temp*_input /sys/class/thermal/thermal_zone*/temp") #\newline));; this command call "shell" with "cat" evry seconds 
-  ;; (system-with-output-to-string "sensors") show not all thermo-sensors
+  ;;  (string-split (system-with-output-to-string "cat /sys/devices/platform/coretemp.*/temp*_input /sys/class/thermal/thermal_zone*/temp") #\newline));; this command call "shell" and "cat" evry refresh
+  ;; (system-with-output-to-string "sensors") This command does not show all of the thermal sensors?
   (string-join
    (map (lambda (x) (let ((thermo
 			    (round (/ (string->number (if (number? (car x))
@@ -361,7 +352,7 @@
 
 
 
-(define (eth0-stat) ;; fixme need wlan0, ...
+(define (eth0-stat) ;; fixme need to use wlan0, ...
   ;; return (in out)
   (list (runtime)
 	(car (map string->number (map match:substring (list-matches "[0-9]+" (first-line-of-file "/sys/class/net/eth0/statistics/rx_bytes")))))   ;; rx
@@ -377,12 +368,12 @@
 
 
 
-(define (sda-stat) ;; fixme need sda, sdb, ...
+(define (sda-stat) ;; fixme need to use sda, sdb, ...
   (let ((sda (map string->number (map match:substring (list-matches "[^ ]+" (search-first-string-in-list (read-lines-list "/proc/diskstats") "sda"))))))
     (list (runtime) (list-ref sda 3) (list-ref sda 7))))
 
 
-(define (swap-stat) ;; fixme need sda, sdb, ...
+(define (swap-stat) ;; fixme: to automatically determine the partition (file?) swap
   (let ((swap (map string->number (map match:substring (list-matches "[^ ]+" (search-first-string-in-list (read-lines-list "/proc/diskstats") "sda2"))))))
     (list (runtime) (list-ref swap 5) (list-ref swap 9))))
 
@@ -516,22 +507,27 @@
 
 
 (define (make-graph func-read-raw func-prepare func-scale func-draw old-raw history-list incremental?)
-  ;; func-read-raw return list of numbers
-  ;;               (1073962454 45394130)
-  ;; func-prepare  return difference between current and old value (cpu-stat) or return not modified value (temperature)
-  ;;               (input: old value for calculate difference)
-  ;;               (3000 1000)
-  ;; func-scale    convert numbers from real value to value for graph
+  ;; func-read-raw function returns a time stamp and a list of values
+  ;;
+  ;; func-prepare  function takes two lists with the raw data (previous list and current list).
+  ;;               function returns the difference between the previous and the current value
+  ;;               for the sensors using the accumulated values (cpu),
+  ;;               or if the sensor shows the current value only returns the current value (temperature).
+  ;;
+  ;; func-scale    function converts a real value to a number suitable for display on the chart.
   ;;               (3000 1000) => (3 1)
-  ;; func-draw     draw graph
+  ;;
+  ;; func-draw     function that generates a description of the graph for dzen
   ;;               (input value = (3 1))
   ;;               "^fg(#efbc69)^p(1)^r(2x3+0+10)^fg(#efbc69)^p(1)^r(2x1+0+10)"
-  ;; old           previous list of value before delay
-  ;;               (6927 3174)
-  ;; history-list  history list contains not scalled value
+  ;;
+  ;; old           the previous value (time stamp, and values)
+  ;;
+  ;; history-list  historical list of unscaled values
   ;;               ((6927 3174) (3000 1000))
-  ;; incremental?  how to draw graph
-  ;;               #t or #f
+  ;;
+  ;; incremental?  mode: incremental graph (#t) or split graph (#f)
+  ;;
 
   (let* ((new-raw (func-read-raw))
 	 (new (func-prepare new-raw old-raw))
@@ -568,7 +564,7 @@
   (if (null? lst)
       '()
       (begin
-	(cons (apply (caar lst) (cdar lst)) (call-func-from-list (cdr lst)))))) ;; strange: (apply (caar lst) (cdar lst)) why not work: (car lst)?
+	(cons (apply (caar lst) (cdar lst)) (call-func-from-list (cdr lst)))))) ;; strange: (apply (caar lst) (cdar lst)) I wonder why such an algorithm does not work: (car lst)?
 
 
 
