@@ -60,9 +60,10 @@
 (define *graph-width* 61) ;; (+ (* (/ time-interval-that-you-want-to-see-from-the-chart *refresh-time*) (+ *bar-width* *bar-horizontal-space*)) *bar-horizontal-space*) = (+ (* (/ 60 3) (+ 2 1)) 1) = 61
 (define *graph-height* 19) ;; check *bar-vertical-space*
 (define *bar-width* 2)
+(define *bar-height* 2)
 (define *bar-horizontal-space* 1)
 (define *bar-vertical-space* 1) ;; check *graph-height*
-;; (define *font-horizontal-size* 5)
+(define *font-horizontal-size* 5)
 
 ;; to emulate the frame around the graph, you can set 
 ;; the height of the graph *graph-height* is less than the actual height of the graph in dzen
@@ -107,8 +108,9 @@
 
 
 
-(define *ps-cpu-show* 2)  ;; number of top process to show
-(define *ps-cpu-above* 5) ;; show only processes above (in %) ;; fixme: need to use
+(define *ps-top-show* 3)  ;; number of top process to show
+(define *ps-top-above* 5) ;; show only processes above (in %) ;; fixme: need to use
+(define *ps-top-name-length* 8) ;; maximum length of process name
 
 (define *cpu-quantity* 2) ;; fixme: it is necessary to calculate automatically
 
@@ -241,12 +243,27 @@
 
 
 (define (top-stat)
-  ;; fixme: need to use *ps-cpu-above*
   ;; fixme: probably better to use a different algorithm http://forums.anandtech.com/showthread.php?t=297729
-  (string-join 
-   (map (lambda (x) (string-pad-right (string-cut x 5 15) 10))
-	(list-head (string-split (system-with-output-to-string (string-append "ps --no-headers -A -o pcpu,comm --sort=-pcpu | head -n " (number->string *ps-cpu-show*))) #\newline) *ps-cpu-show*))
-   " "))
+  (define (top-list)
+    (map match:substring (list-matches "[^ \n]+" (system-with-output-to-string (string-append "ps --no-headers -A -o pcpu,comm --sort=-pcpu | head -n " (number->string *ps-top-show*))))))
+  
+
+  (define (top-generator lst result)
+    (if (null? lst)
+	result
+	(let* ((pcpu (inexact->exact (string->number (car lst))))
+	       (pcpu-scalled (truncate (scale pcpu 0 100 0 (* *ps-top-name-length* *font-horizontal-size*))))
+	       (comm (cadr lst)))
+	  (top-generator (cddr lst)
+			 (string-append result
+					(if (< pcpu *ps-top-above*)
+					    (make-string *ps-top-name-length* #\space)
+					    (string-append 
+					     (generate-grounded-bar *bar-horizontal-space* 0 pcpu-scalled *bar-height* *color-3*)
+					     (format #f "^p(-~d)~a" pcpu-scalled (string-pad-right (string-cut comm 0 *ps-top-name-length*) *ps-top-name-length*)))))))))
+  
+  (top-generator (top-list) ""))
+  
 
 
 (define (pulseaudio-stat)
@@ -308,7 +325,10 @@
 							  (first-line-of-file (car x))))
 				      (cadr x)))))
 		      (format #f "~a~2,'0d"
-			      (generate-vertical-bar (round (scale thermo 0 100 0 *graph-height*))
+			      (generate-grounded-bar *bar-horizontal-space*
+						     0
+						     *bar-width*
+						     (round (scale thermo 0 100 0 *graph-height*))
 						     (cond ((< thermo (caddr x))  *color-1*)   ;; permissible_limit
 							   ((> thermo (cadddr x)) *color-5*)   ;; maximum_limit
 							   (else                  *color-0*))) ;; normal
@@ -380,20 +400,20 @@
 
 
 
-(define (generate-vertical-bar y color)
+(define (generate-grounded-bar x y w h color)
   ;; 
   ;;^fg(white)^p(1)^r(3x5+0-6)
   ;;    color  position
   ;;             1   --> gcpubar -s g -w 100 -h 10 -gs <<1>> -gw 2
   ;;                rectangle WIDTHxHEIGHT±X±Y
-  (format #f "^fg(#~6,'0x)^p(~d)^r(~dx~d~@d~@d)"
+  (format #f "^fg(#~6,'0x)^p(~@d)^r(~dx~d~@d~@d)"
 	  color
-	  *bar-horizontal-space*
-	  *bar-width*
-	  y
+	  x
+	  w
+	  h
 	  0
-	  (ceiling (- (/ *graph-height* 2) (/ y 2)))))
-	  
+	  (- (ceiling (- (/ *graph-height* 2) (/ h 2))) y)))
+
 
 
 (define (generate-incremental-particle-bar y prev-height num)
