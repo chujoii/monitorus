@@ -108,7 +108,7 @@
 
 
 
-(define *ps-top-show* 3)  ;; number of top process to show
+(define *ps-top-show* 2)  ;; number of top process to show
 (define *ps-top-above* 5) ;; show only processes above (in %) ;; fixme: need to use
 (define *ps-top-name-length* 8) ;; maximum length of process name
 
@@ -130,12 +130,20 @@
 	(list "/sys/class/thermal/thermal_zone4/temp"        1000 50 100)))
 
 
+(define *list-fs*
+  (list (list "rootfs"    "/")
+	(list "/dev/sda1" "b")
+	(list "/dev/sda4" "h")))
+
+
+
 (define *color-0* #xb17e37) ;; orange system out
 (define *color-1* #x439595) ;; aqua   user   in
 (define *color-2* #x357d35) ;; green  nice
 (define *color-3* #x999999) ;; gray   text
 (define *color-4* #x000000) ;; black  background
 (define *color-5* #xffffff) ;; white  limit
+(define *color-6* #x000000)
 
 ;; ---------------------- end config ----------------------
 
@@ -245,7 +253,7 @@
 (define (top-stat)
   ;; fixme: probably better to use a different algorithm http://forums.anandtech.com/showthread.php?t=297729
   (define (top-list)
-    (map match:substring (list-matches "[^ \n]+" (system-with-output-to-string (string-append "ps --no-headers -A -o pcpu,comm --sort=-pcpu | head -n " (number->string *ps-top-show*))))))
+    (list-head (map match:substring (list-matches "[^ \n]+" (system-with-output-to-string "ps --no-headers -A -o pcpu,comm --sort=-pcpu" ))) (* 2 *ps-top-show*)))
   
 
   (define (top-generator lst result)
@@ -257,7 +265,7 @@
 	  (top-generator (cddr lst)
 			 (string-append result
 					(if (< pcpu *ps-top-above*)
-					    (make-string *ps-top-name-length* #\space)
+					    (format #f "^p(~d)~a" *bar-horizontal-space* (make-string *ps-top-name-length* #\space)) ;; ^p(+1) because (generate-grounded-bar *bar-horizontal-space* ...) also add space
 					    (string-append 
 					     (generate-grounded-bar *bar-horizontal-space* 0 pcpu-scalled *bar-height* *color-3*)
 					     (format #f "^p(-~d)~a" pcpu-scalled (string-pad-right (string-cut comm 0 *ps-top-name-length*) *ps-top-name-length*)))))))))
@@ -275,7 +283,7 @@
 			  "Cached"
 			  "SwapTotal"
 			  "SwapFree"))
-	 (mem-numbers (map (lambda (x) (string->number(car (map match:substring (list-matches "[0-9]+" (search-first-string-in-list mem-info x))))))
+	 (mem-numbers (map (lambda (x) (string->number (car (map match:substring (list-matches "[0-9]+" (search-first-string-in-list mem-info x))))))
 			   mem-names))
 	 
 	 (mem-total   (list-ref mem-numbers 0))
@@ -310,7 +318,7 @@
     (format #f "^ib(1)^fg(#~6,'0x)^c(~d~@d)^p(-~d)^fg(#~6,'0x)^c(~d~@d)^p(-~d)^fg(#~6,'0x)^c(~d~@d)" ;; text degree  "^p(-~d)^fg(#~6,'0x)~3,' d"
 	    color-b ;; background color
 	    diameter 360 ;; background full circle
-
+	    
 	    diameter ;; shift to left
 	    color-f ;; degree color
 	    diameter (- -90 degree) ;; degree segment
@@ -420,6 +428,7 @@
 
 
 (define (sda-stat) ;; fixme need to use sda, sdb, ...
+  ;; /usr/src/linux/Documentation/ABI/testing/procfs-diskstats
   (let ((sda (map string->number (map match:substring (list-matches "[^ ]+" (search-first-string-in-list (read-lines-list "/proc/diskstats") "sda"))))))
     (list (runtime) (list-ref sda 3) (list-ref sda 7))))
 
@@ -429,6 +438,35 @@
     (list (runtime) (list-ref swap 5) (list-ref swap 9))))
 
 
+
+
+(define (fs-stat)
+  ;; /proc/partitions ?
+  ;; /proc/mounts ?
+  (let* ((fs-info (string-split (system-with-output-to-string "df -h") #\newline))
+	 (column-avail 3)
+	 (column-use 4)
+	 (fs-new-list (map (lambda (x)
+			     (let ((fs-current (map match:substring (list-matches "[^ %]+" (search-first-string-in-list fs-info (car x))))))
+			       (append x
+				       (list (string->number (list-ref fs-current column-use))
+					     (list-ref fs-current column-avail)))))
+			   *list-fs*)))
+    ;; (fs-new-list) === list of list ("filesystem" "symbol" 42 "32M")
+
+    (string-join
+     (map (lambda (x)
+	    (string-append
+	     (format "^fg(#~6,'0x) ~a~a"
+		     (if (> (caddr x) 80) *color-5* *color-3*)
+		     (cadr x)
+		     (string-pad (cadddr x) 5))
+	     (generate-incremental-multi-bar (list (truncate (scale (caddr x)         0 100  0 *graph-height*))
+						   (truncate (scale (- 100 (caddr x)) 0 100  0 *graph-height*))))))
+	  fs-new-list)
+     "")))
+  
+     
 
 
 (define (generate-grounded-bar x y w h color)
@@ -445,7 +483,12 @@
 	  0
 	  (- (ceiling (- (/ *graph-height* 2) (/ h 2))) y)))
 
+(define (canvas width height color)
+  (string-append (generate-grounded-bar 0 0 width height color)
+		 (format #f "^p(-~d)" width)))
 
+(define (img filename)
+  (format #f "^i(~a)" filename))
 
 (define (generate-incremental-particle-bar y prev-height num)
   ;;
@@ -615,7 +658,7 @@
   (if (null? lst)
       '()
       (begin
-	(cons (apply (caar lst) (cdar lst)) (call-func-from-list (cdr lst)))))) ;; strange: (apply (caar lst) (cdar lst)) I wonder why such an algorithm does not work: (car lst)?
+	(cons (apply (caar lst) (cdar lst)) (call-func-from-list (cdr lst)))))) ;; strange: (apply (caar lst) (cdar lst)) I wonder why such an algorithm does not work: (car lst)? eval?
 
 
 
@@ -635,19 +678,40 @@
 (dzinn 
  (list 
   (list make-text *color-3* "-[cpu")
+  (list make-text *color-3* (canvas *graph-width* *graph-height* *color-6*))
   (list make-graph cpu-stat cpu-diff-prepare cpu-scale generate-incremental-multi-bar (cpu-stat) (make-list *number-of-bar* (list 0 0 0 0)) #t)
+  
   (list make-text *color-3* "]-[eth0")
+  (list make-text *color-3* (canvas *graph-width* *graph-height* *color-6*))
   (list make-graph eth0-stat diff-prepare simple-scale generate-splitted-multi-bar (eth0-stat) (make-list *number-of-bar* (list 0 0 0)) #f)
+  
   (list make-text *color-3* "]-[sda")
+  (list make-text *color-3* (canvas *graph-width* *graph-height* *color-6*))
   (list make-graph sda-stat diff-prepare simple-scale generate-splitted-multi-bar (sda-stat) (make-list *number-of-bar* (list 0 0 0)) #f)
+  
+  
+  (list make-text *color-3* "]-[fs")
+  (list make-text *color-3* (canvas (+ (* (+ (* *font-horizontal-size* 7) *bar-horizontal-space* *bar-width* ) (length *list-fs*)) *bar-horizontal-space*) *graph-height* *color-6*))  ;; 7=(+ 1 5 1) 1=space 5=Available 1=fs-char ; fixme last *bar-horizontal-space* ??
+  (list make-dynamic-text *color-3* fs-stat)
+
+  ;; ============================== danger! eat many cpu
   (list make-text *color-3* "]-[top")
+  (list make-text *color-3* (canvas (+ (* *font-horizontal-size* *ps-top-name-length* *ps-top-show*) (* *bar-horizontal-space* *ps-top-show*) *bar-horizontal-space*) *graph-height* *color-6*)) ;; fixme (+ ... *bar-horizontal-space*) very strange
   (list make-dynamic-text *color-3* top-stat)
+  
   (list make-text *color-3* "]-[mem")
+  (list make-text *color-3* (canvas (+ (* *bar-width* 2) (* *bar-horizontal-space* 3)) *graph-height* *color-6*))
   (list make-dynamic-text *color-3* mem-stat)
+  
   (list make-text *color-3* "]-[t")
+  (list make-text *color-3* (canvas (+ (* (+ (* *font-horizontal-size* 2) *bar-width* *bar-horizontal-space*) (length *list-thermal*)) *bar-horizontal-space*) *graph-height* *color-6*)) ;; fixme (+ ... *bar-horizontal-space*) very strange
   (list make-dynamic-text *color-3* thermo-stat)
-  (list make-text *color-3* "]-[snd")
-  (list make-dynamic-text *color-3* pulseaudio-stat)
+  
+  ;; ============================== danger! eat many cpu and write information to disk evry refresh
+  ;; (list make-text *color-3* "]-[snd")
+  ;; (list make-text *color-3* (canvas *graph-height* *graph-height* *color-6*))
+  ;; (list make-dynamic-text *color-3* pulseaudio-stat)
+  
   (list make-text *color-3* "]-")
   ))
 
