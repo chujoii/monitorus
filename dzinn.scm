@@ -98,26 +98,6 @@
 
 
 
-
-(define (diff-prepare new-val old-val)
-  (map - (cdr new-val) (cdr old-val))) ;; "cdr" because for simple prepare function not necessary "runtime" element
-
-
-
-(define (cpu-diff-prepare new-val old-val)
-  (let* ((cpu-val (map - new-val old-val)))
-    (map (lambda (x) (/ x (car cpu-val)));; (car cpu-val) === accumulation time
-	 (cdr cpu-val))))
-
-
-
-
-(define (simple-scale x in-min in-max out-min out-max)
-  (map (lambda (element) (truncate (scale element in-min in-max out-min out-max))) x))
-
-
-
-
 (define (top-stat)
   ;; fixme: probably better to use a different algorithm http://forums.anandtech.com/showthread.php?t=297729
   (define (top-list)
@@ -164,12 +144,15 @@
 	 (swap-graph-height (- *graph-height* (* 2 *bar-vertical-space*))))
     
     (string-append
+     (create-space *element-horizontal-space*)
      (generate-incremental-multi-bar (list (truncate (scale (- mem-total mem-free mem-buffers mem-cached) 0 mem-total  0 mem-graph-height))
 					   (truncate (scale mem-buffers                                   0 mem-total  0 mem-graph-height))
 					   (truncate (scale mem-cached                                    0 mem-total  0 mem-graph-height))
 					   (truncate (scale mem-free                                      0 mem-total  0 mem-graph-height))))
+     (create-space *element-horizontal-space*)
      (generate-incremental-multi-bar (list (truncate (scale (- swap-total swap-free)   0 swap-total  0 swap-graph-height))
-					   (truncate (scale swap-free                  0 swap-total  0 swap-graph-height)))))))
+					   (truncate (scale swap-free                  0 swap-total  0 swap-graph-height))))
+     (create-space *element-horizontal-space*))))
   
 
 
@@ -183,9 +166,9 @@
   (define (draw-circle-withsegment diameter degree color-b color-f)
     ;; ^ib(1)^c(26+360)^p(-26)^fg(#aecf96)^c(26-120)^p(-26)^fg(#000000)^c(26-60)
     ;;          circle  shift   color      segment   shift  color       segment
-    (format #f "^ib(1)^fg(#~6,'0x)^c(~d~@d)^p(-~d)^fg(#~6,'0x)^c(~d~@d)^p(-~d)^fg(#~6,'0x)^c(~d~@d)" ;; text degree  "^p(-~d)^fg(#~6,'0x)~3,' d"
+    (format #f "^ib(1)^fg(#~6,'0x)^co(~d)^p(-~d)^fg(#~6,'0x)^c(~d~@d)^p(-~d)^fg(#~6,'0x)^c(~d~@d)" ;; text degree  "^p(-~d)^fg(#~6,'0x)~3,' d"
 	    color-b ;; background color
-	    diameter 360 ;; background full circle
+	    diameter ;; background full circle
 	    
 	    diameter ;; shift to left
 	    color-f ;; degree color
@@ -202,7 +185,7 @@
   ;; fixme need to use dB?
   (let ((snd (string-split (system-with-output-to-string "pacmd list-sinks 0") #\newline)))
     (if (null? (search-first-string-in-list snd "muted: no"))
-	"x" ;; mute
+	(add-color *color-3* " >X<") ;; mute
 	(let* ((volume (round (scale (string->number (list-ref (map match:substring (list-matches "[^ %]+" (search-first-string-in-list snd "volume: 0:"))) 2)) 0 100 0 90)))
 	       (shift (* 2 *bar-horizontal-space*))
 	       (d0 *graph-height*)
@@ -311,30 +294,66 @@
 (define (fs-stat)
   ;; /proc/partitions ?
   ;; /proc/mounts ?
+  ;;
+  ;; return list: (fs-new-list) === list of list ("filesystem" "symbol" use=42% free="32M")
+  
   (let* ((fs-info (string-split (system-with-output-to-string "df -h") #\newline))
 	 (column-avail 3)
-	 (column-use 4)
-	 (fs-new-list (map (lambda (x)
-			     (let ((fs-current (map match:substring (list-matches "[^ %]+" (search-first-string-in-list fs-info (car x))))))
-			       (append x
-				       (list (string->number (list-ref fs-current column-use))
-					     (list-ref fs-current column-avail)))))
-			   *list-fs*)))
-    ;; (fs-new-list) === list of list ("filesystem" "symbol" 42 "32M")
+	 (column-use 4))
+    (map (lambda (x)
+	   (let ((fs-current (map match:substring (list-matches "[^ %]+" (search-first-string-in-list fs-info (car x))))))
+	     (append x
+		     (list (string->number (list-ref fs-current column-use))
+			   (list-ref fs-current column-avail)))))
+	 *list-fs*)))
+    
 
-    (string-join
-     (map (lambda (x)
-	    (string-append
-	     (format "^fg(#~6,'0x) ~a~a"
-		     (if (> (caddr x) 80) *color-5* *color-3*)
-		     (cadr x)
-		     (string-pad (cadddr x) 5))
-	     (generate-incremental-multi-bar (list (truncate (scale (caddr x)         0 100  0 *graph-height*))
-						   (truncate (scale (- 100 (caddr x)) 0 100  0 *graph-height*))))))
-	  fs-new-list)
-     "")))
+
+(define (fs-draw)
+  (string-join
+   (map (lambda (x)
+	  (string-append
+	   (format "^fg(#~6,'0x) ~a~a"
+		   (if (> (caddr x) 80) *color-5* *color-3*)
+		   (cadr x)
+		   (string-pad (cadddr x) 5))
+	   (generate-incremental-multi-bar (list (truncate (scale (caddr x)         0 100  0 *graph-height*))
+						 (truncate (scale (- 100 (caddr x)) 0 100  0 *graph-height*))))))
+	fs-new-list)
+   ""))
   
+
+
+
+
+
+
+(define (no-diff-prepare new-val old-val)
+  new-val)
+
+
+(define (fs-scale x in-min in-max out-min out-max)
+  (map (lambda (element) (truncate (scale element in-min in-max out-min out-max))) x))
+
      
+(define (diff-prepare new-val old-val)
+  (map - (cdr new-val) (cdr old-val))) ;; "cdr" because for simple prepare function not necessary "runtime" element
+
+
+
+(define (cpu-diff-prepare new-val old-val)
+  (let* ((cpu-val (map - new-val old-val)))
+    (map (lambda (x) (/ x (car cpu-val)));; (car cpu-val) === accumulation time
+	 (cdr cpu-val))))
+
+
+
+
+(define (simple-scale x in-min in-max out-min out-max)
+  (map (lambda (element) (truncate (scale element in-min in-max out-min out-max))) x))
+
+
+
 
 
 (define (generate-grounded-bar x y w h color)
@@ -343,56 +362,49 @@
   ;;    color  position
   ;;             1   --> gcpubar -s g -w 100 -h 10 -gs <<1>> -gw 2
   ;;                rectangle WIDTHxHEIGHT±X±Y
-  (format #f "^fg(#~6,'0x)^p(~@d)^r(~dx~d~@d~@d)"
+  (format #f "^fg(#~6,'0x)^r(~dx~d~@d~@d)";;"^fg(#~6,'0x)^p(~@d)^r(~dx~d~@d~@d)"
 	  color
-	  x
+	  ;;x
 	  w
 	  h
-	  0
+	  x
 	  (- (ceiling (- (/ *graph-height* 2) (/ h 2))) y)))
+
+
+
 
 (define (canvas width height color)
   (string-append (generate-grounded-bar 0 0 width height color)
 		 (format #f "^p(-~d)" width)))
 
+(define (create-space width)
+     (format #f "^p(~d)" width))
+
 (define (img filename)
   (format #f "^i(~a)" filename))
 
-(define (generate-incremental-particle-bar y prev-height num)
-  ;;
-  ;;^fg(white)^p(1)^r(3x5+0-6)
-  ;;    color  position
-  ;;             1   --> gcpubar -s g -w 100 -h 10 -gs <<1>> -gw 2
-  ;;                rectangle WIDTHxHEIGHT±X±Y
-  (if (and (= y 0) (> num 0))
-      
-      (list "" prev-height) ;; do not draw small column
-      
-      (let* ((y-shift (- (ceiling (- (/ *graph-height* 2) (/ y 2)))
-			 prev-height)))
-	(list (format #f "^fg(#~6,'0x)^p(~d)^r(~dx~d~@d~@d)"
-		      ;;(cond ((< y (* *graph-height* (/ 1 3))) #x777777)
-		      ;;  ((< y (* *graph-height* (/ 2 3))) #xAAAAAA)
-		      ;;(else #xFFFFFF))
-		      (cond ((= num 0) *color-0*)  ;; system 
-			    ((= num 1) *color-1*)  ;; user
-			    ((= num 2) *color-2*)  ;; nice
-			    (else      *color-3*)) ;; system        ;;(ash color 8)
-		      (if (= num 0) *bar-horizontal-space* (- *bar-width*))
-		      *bar-width*
-		      y
-		      0
-		      y-shift)
-;	      (if (= y 0) 0 (+ prev-height y *bar-vertical-space*))))))
-	      (+ prev-height y *bar-vertical-space*)))))
 
 
-(define (generate-incremental-multi-bar x-list)
-  ;; 
-  ;;^fg(white)^p(1)^r(3x5+0-6)
-  ;;    color  position
-  ;;             1   --> gcpubar -s g -w 100 -h 10 -gs <<1>> -gw 2
-  ;;                rectangle WIDTHxHEIGHT±X±Y
+
+(define (generate-incremental-particle-bar h prev-height num)
+  (list
+   (cond ;; function is not called if the sum of all columns is less than 1. but the first column can be null, and the other does not. if the first does not draw (or simulate) the remaining columns will move and paint over the previous colonnade, and the total width of the graph is reduced to the width of the column plus the margin 
+    ((and (= h 0) (> num 0))  "") ;; do not draw a small column
+    ((and (= h 0) (> num 0)) (format #f "^p(~d)" (+ *bar-horizontal-space* *bar-width* ))) ;; simulate space+bar, because: function is not called if the sum of all columns is less than 1. but the first column can be null, and the other does not. if the first does not draw (or simulate) the remaining columns will move and paint over the previous colonnade, and the total width of the graph is reduced to the width of the column plus the margin 
+    (else (generate-grounded-bar (if (= num 0) *bar-horizontal-space* (- *bar-width*))
+				 prev-height
+				 *bar-width*
+				 h
+				 (cond ((= num 0) *color-0*)  ;; system 
+				       ((= num 1) *color-1*)  ;; user
+				       ((= num 2) *color-2*)  ;; nice
+				       (else      *color-3*))))) ;; fixme need more color
+   (+ prev-height h *bar-vertical-space*)))
+
+
+
+
+(define (generate-incremental-multi-bar func-scale x-list)
   (define (multi-bar lst previous-high num)
     (if (null? lst)
 	'()
@@ -400,10 +412,15 @@
 	  (let ((res-txt-shift (generate-incremental-particle-bar (car lst) previous-high num)))
 	    (cons (car res-txt-shift) (multi-bar (cdr lst) (cadr res-txt-shift) (+ num 1)))))))
   
-
-  (if (< (apply + x-list) 1)
-      (format #f "^p(~d)" (+ *bar-width* *bar-horizontal-space*)) ;; skip if zero hight of all bar
-      (string-join (multi-bar x-list 0 0) "")))
+  (let* ((max-val (max (apply max (map (lambda (x) (apply + x)) x-list)))) ;; max increment
+	 (real-height (- *graph-height* (* *bar-vertical-space* (- (length (car x-list)) 1)))) ;; 1#2#3 number of "#" === (- length 1) === 2 ;; fixme: need only count the distance between the non-zero columns (short columns are not shown), but the resultant height of the columns (especially the small columns), depends on the distance between the columns. Otherwise, the top will often be an empty space, even when wholly loaded, due to rounding error
+	 (y-list (map (lambda (x) (func-scale x 0 max-val 0 real-height)) x-list)))
+    
+    (map (lambda (lst)
+	   (if (< (apply + lst) 1)
+	       (format #f "^p(~d)" (+ *bar-horizontal-space* *bar-width*)) ;; create a emptiness, if the total height of the column is less than 1
+	       (string-join (multi-bar lst 0 0) "")))
+	 y-list)))
 
 
 
@@ -441,19 +458,21 @@
 
 
 
-(define (generate-splitted-multi-bar x-list)
+(define (generate-splitted-multi-bar func-scale x-list)
   ;; x-list only pair list: (a b)
-  ;;^fg(white)^p(1)^r(3x5+0-6)
-  ;;    color  position
-  ;;             1   --> gcpubar -s g -w 100 -h 10 -gs <<1>> -gw 2
-  ;;                rectangle WIDTHxHEIGHT±X±Y
   (define (multi-bar lst num)
     (if (null? lst)
 	'()
 	(cons (generate-splitted-particle-bar (car lst) num) (multi-bar (cdr lst) (+ num 1)))))
-  (if (< (apply + x-list) 1)
-      (format #f "^p(~d)" (+ *bar-width* *bar-horizontal-space*)) ;; skip if zero hight of all bar
-      (string-join (multi-bar x-list 0) "")))
+ 
+  (let* ((max-val (max (apply max (map (lambda (x) (apply max x)) x-list)))) ;; max from all
+	 (real-height (truncate (/ (- *graph-height* *bar-vertical-space*) 2)))
+	 (y-list (map (lambda (x) (func-scale x 0 max-val 0 real-height)) x-list)))
+    (map (lambda (lst)
+	   (if (< (apply + lst) 1)
+	       (format #f "^p(~d)" (+ *bar-width* *bar-horizontal-space*)) ;; skip if zero hight of all bar
+	       (string-join (multi-bar lst 0) "")))
+	 y-list)))
 
 
 
@@ -468,7 +487,7 @@
 
 
 
-(define (make-graph func-read-raw func-prepare func-scale func-draw old-raw history-list incremental?)
+ (define (store-history func-read-raw func-prepare func-scale func-draw old-raw history-list incremental? refresh-time)
   ;; func-read-raw function returns a time stamp and a list of values
   ;;
   ;; func-prepare  function takes two lists with the raw data (previous list and current list).
@@ -490,35 +509,32 @@
   ;;
   ;; incremental?  mode: incremental graph (#t) or split graph (#f)
   ;;
-
+  
   (let* ((new-raw (func-read-raw))
 	 (new (func-prepare new-raw old-raw))
-	 (max-val (if incremental?
-		      (max (apply max (map (lambda (x) (apply + x)) history-list)) (apply + new)) ;; max inccrement
-		      (max (apply max (map (lambda (x) (apply max x)) history-list)) (apply max new)))) ;; max from all
-	 (real-height (if incremental?
-			  (- *graph-height* (* *bar-vertical-space* (- (length old-raw) 1))) ;; 1#2#3 number of "#" === (- length 1) === 2 ;; fixme: need only count the distance between the non-zero columns (short columns are not shown), but the resultant height of the columns (especially the small columns), depends on the distance between the columns. Otherwise, the top will often be an empty space, even when wholly loaded, due to rounding error
-			  (truncate (/ (- *graph-height* *bar-vertical-space*) 2))))
 	 (new-history-list (append (cdr history-list) (list new))))
     
-    (map display (map func-draw (map (lambda (x) (func-scale x 0 max-val 0 real-height)) new-history-list)))
-
-    (list make-graph func-read-raw func-prepare func-scale func-draw new-raw new-history-list incremental?)))
-
-
+    (map display (func-draw func-scale new-history-list))
+    
+    (list store-history func-read-raw func-prepare func-scale func-draw new-raw new-history-list incremental? *refresh-time*)))
 
 
 
 
-(define (make-text color str)
-  (format #t "^fg(#~6,'0x)~a" color str)
-  (list make-text color str))
 
 
-(define (make-dynamic-text color func)
-  (format #t "^fg(#~6,'0x)~a" color (func))
-  (list make-dynamic-text color func))
+(define (make-static-info str)
+  (format #t "~a" str)
+  (list make-static-info str))
 
+
+(define (make-dynamic-text func)
+  (format #t "~a" (func))
+  (list make-dynamic-text func))
+
+
+(define (add-color color txt)
+  (format #f "^fg(#~6,'0x)~a" color txt))
 
 
 

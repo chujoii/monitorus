@@ -42,6 +42,7 @@
 ;; ---------------------- start config ----------------------
 
 (define *refresh-time* 3) ;; in seconds
+(define *slow-refresh-time* 30) ;; in seconds (for functions that eat up a lot of cpu)
 
 (define *graph-width* 61) ;; (+ (* (/ time-interval-that-you-want-to-see-from-the-chart *refresh-time*) (+ *bar-width* *bar-horizontal-space*)) *bar-horizontal-space*) =for-example= (+ (* (/ 60 3) (+ 2 1)) 1) = 61
 (define *graph-height* 19) ;; check *bar-vertical-space*
@@ -49,6 +50,7 @@
 (define *bar-height* 2)
 (define *bar-horizontal-space* 1)
 (define *bar-vertical-space* 1) ;; check *graph-height*
+(define *element-horizontal-space* 1)
 (define *font-horizontal-size* 5)
 
 ;; to emulate the frame around the graph, you can set 
@@ -142,65 +144,66 @@
 
 (dzinn 
  (list 
-  (list make-text *color-3* "-[cpu")
-  (list make-text *color-3* (canvas *graph-width* *graph-height* *color-4*))
-  (list make-graph cpu-stat cpu-diff-prepare cpu-scale generate-incremental-multi-bar (cpu-stat) (make-list *number-of-bar* (list 0 0 0 0)) #t)
-
-
+  (list make-static-info (add-color *color-3* "-[cpu"))
+  (list make-static-info (canvas *graph-width* *graph-height* *color-4*))
+  (list store-history cpu-stat cpu-diff-prepare cpu-scale generate-incremental-multi-bar (cpu-stat) (make-list *number-of-bar* (list 0 0 0 0)) #t *refresh-time*)
   
-  (list make-text *color-3* "]-[eth0")
-  (list make-text *color-3* (canvas *graph-width* *graph-height* *color-4*))
-  (list make-graph eth0-stat diff-prepare simple-scale generate-splitted-multi-bar (eth0-stat) (make-list *number-of-bar* (list 0 0 0)) #f)
-
-
   
-  (list make-text *color-3* "]-[sda")
-  (list make-text *color-3* (canvas *graph-width* *graph-height* *color-4*))
-  (list make-graph sda-stat diff-prepare simple-scale generate-splitted-multi-bar (sda-stat) (make-list *number-of-bar* (list 0 0 0)) #f)
-
-
-
+  
+  (list make-static-info (add-color *color-3* "]-[eth0"))
+  (list make-static-info (canvas *graph-width* *graph-height* *color-4*))
+  (list store-history eth0-stat diff-prepare simple-scale generate-splitted-multi-bar (eth0-stat) (make-list *number-of-bar* (list 0 0 0)) #f *refresh-time*)
+  
+  
+  
+  (list make-static-info (add-color *color-3* "]-[sda"))
+  (list make-static-info (canvas *graph-width* *graph-height* *color-4*))
+  (list store-history sda-stat diff-prepare simple-scale generate-splitted-multi-bar (sda-stat) (make-list *number-of-bar* (list 0 0 0)) #f *refresh-time*)
+  
+  
+  
   ;; disabled because usually do not use swap
-  ;;(list make-text *color-3* "]-[swap")
-  ;;(list make-text *color-3* (canvas *graph-width* *graph-height* *color-4*))
-  ;;(list make-graph swap-stat diff-prepare simple-scale generate-splitted-multi-bar (swap-stat) (make-list *number-of-bar* (list 0 0 0)) #f)
-
-
+  ;;(list make-static-info (add-color *color-3* "]-[swap"))
+  ;;(list make-static-info (canvas *graph-width* *graph-height* *color-4*))
+  ;;(list store-history swap-stat diff-prepare simple-scale generate-splitted-multi-bar (swap-stat) (make-list *number-of-bar* (list 0 0 0)) #f *refresh-time*)
+  
+  
   
   ;; ============================== danger! eat cpu
-  (list make-text *color-3* "]-[fs")
-  (list make-text *color-3* (canvas (+ (* (+ (* *font-horizontal-size* 7) *bar-horizontal-space* *bar-width* ) (length *list-fs*)) *bar-horizontal-space*) *graph-height* *color-4*))  ;; 7=(+ 1 5 1) 1=space 5=Available 1=fs-char ; fixme last *bar-horizontal-space* ??
-  (list make-dynamic-text *color-3* fs-stat)
-
-
-
+;  (list make-static-info (add-color *color-3* "]-[fs"))
+;  (list make-static-info (canvas (+ (* (+ (* *font-horizontal-size* 7) *bar-horizontal-space* *bar-width* ) (length *list-fs*)) *bar-horizontal-space*) *graph-height* *color-4*))  ;; 7=(+ 1 5 1) 1=space 5=Available 1=fs-char ; fixme last *bar-horizontal-space* ??
+;  (list store-history fs-stat no-diff-prepare fs-scale fs-draw (fs-stat) (list (list 0 0 0)) #f *refresh-time*)
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;; (list make-dynamic-text fs-stat)
+  
+  
+  
   ;; ============================== danger! eat cpu
-  (list make-text *color-3* "]-[top")
-  (list make-text *color-3* (canvas (+ (* *font-horizontal-size* *ps-top-name-length* *ps-top-show*) (* *bar-horizontal-space* *ps-top-show*) *bar-horizontal-space*) *graph-height* *color-4*)) ;; fixme (+ ... *bar-horizontal-space*) very strange
-  (list make-dynamic-text *color-3* top-stat)
-
-
+;  (list make-static-info (add-color *color-3* "]-[top"))
+;  (list make-static-info (canvas (+ (* *font-horizontal-size* *ps-top-name-length* *ps-top-show*) (* *bar-horizontal-space* *ps-top-show*) *bar-horizontal-space*) *graph-height* *color-4*)) ;; fixme (+ ... *bar-horizontal-space*) very strange
+;  (list make-dynamic-text top-stat)
+ 
   
-  (list make-text *color-3* "]-[mem")
-  (list make-text *color-3* (canvas (+ (* *bar-width* 2) (* *bar-horizontal-space* 3)) *graph-height* *color-4*))
-  (list make-dynamic-text *color-3* mem-stat)
-
-
   
-  (list make-text *color-3* "]-[t")
-  (list make-text *color-3* (canvas (+ (* (+ (* *font-horizontal-size* 2) *bar-width* *bar-horizontal-space*) (length *list-thermal*)) *bar-horizontal-space*) *graph-height* *color-4*)) ;; fixme (+ ... *bar-horizontal-space*) very strange
-  (list make-dynamic-text *color-3* thermo-stat)
-
-
+;  (list make-static-info (add-color *color-3* "]-[mem"))
+;  (list make-static-info (canvas (+ (* *bar-width* 2) (* (+ *bar-horizontal-space* *element-horizontal-space*) 3)) *graph-height* *color-4*))
+;  (list make-dynamic-text mem-stat)
+  
+  
+  
+;  (list make-static-info (add-color *color-3* "]-[t"))
+;  (list make-static-info (canvas (+ (* (+ (* *font-horizontal-size* 2) *bar-width* *bar-horizontal-space*) (length *list-thermal*)) *bar-horizontal-space*) *graph-height* *color-4*)) ;; fixme (+ ... *bar-horizontal-space*) very strange
+;  (list make-dynamic-text thermo-stat)
+  
+  
   
   ;; ============================== danger! eat many cpu and "pacmd ?" write information to disk evry refresh!
-  ;; (list make-text *color-3* "]-[snd")
-  ;; (list make-text *color-3* (canvas *graph-height* *graph-height* *color-4*))
-  ;; (list make-dynamic-text *color-3* pulseaudio-stat)
-
-
+  ;;(list make-static-info (add-color *color-3* "]-[snd"))
+  ;;(list make-static-info (canvas *graph-height* *graph-height* *color-4*))
+  ;;(list make-dynamic-text pulseaudio-stat)
   
-  (list make-text *color-3* "]-")
+  
+  
+  (list make-static-info (add-color *color-3* "]-"))
   ))
 
 
