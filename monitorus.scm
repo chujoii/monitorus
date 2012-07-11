@@ -57,8 +57,8 @@
 ;; to emulate the frame around the graph, you can set 
 ;; the height of the graph *graph-height* is less than the actual height of the graph in dzen
 ;; For example, if real_dzen_height = 21 (dzen2 ... -h 21 ...), then set the *graph-height* = 19 for a single pixel frame
-;; (define *horizontal-border* 0)
-;; (define *vertical-border* 0)
+(define *horizontal-border* 1)
+(define *vertical-border* 1)
 
 ;; if *graph-height* is odd, then set *bar-vertical-space* to odd
 ;; if *graph-height* is even, then set *bar-vertical-space* to even
@@ -98,7 +98,7 @@
 
 
 (define *ps-top-show* 2)  ;; number of top process to show
-(define *ps-top-above* 5) ;; show only processes above (in %) ;; fixme: need to use
+(define *ps-top-above* 0) ;; show only processes above (in %) ;; fixme: need to use
 (define *ps-top-name-length* 8) ;; maximum length of process name
 
 (define *cpu-quantity* 2) ;; fixme: it is necessary to calculate automatically
@@ -146,65 +146,65 @@
 
 (dzinn 
  (list 
-  (list make-static-info (add-color *color-3* "-[cpu"))
+  (list make-static-info (string-append (set-y-zero-to-center) (add-color *color-3* "-[cpu")))
   (list make-static-info (canvas *graph-width* *graph-height* *color-4*))
-  (list store-history cpu-stat cpu-diff-prepare cpu-scale generate-incremental-multi-bar (cpu-stat) (make-list *number-of-bar* (list 0 0 0 0)) *normal-refresh-time*)
+  (list store-history cpu-stat cpu-diff-prepare cpu-scale generate-incremental-multi-bar (cpu-stat) (make-list *number-of-bar* (list 0 0 0)) *normal-refresh-time* '())
   
   
   
-  (list make-static-info (add-color *color-3* "]-[eth0"))
+  (list make-static-info (string-append (set-y-zero-to-center) (add-color *color-3* "]-[eth0")))
   (list make-static-info (canvas *graph-width* *graph-height* *color-4*))
-  (list store-history eth0-stat diff-prepare truncate-scale-list generate-splitted-multi-bar (eth0-stat) (make-list *number-of-bar* (list 0 0 0)) *normal-refresh-time*)
+  (list store-history eth0-stat diff-prepare truncate-scale-list generate-splitted-multi-bar (eth0-stat) (make-list *number-of-bar* (list 0 0)) *normal-refresh-time* '())
   
   
   
-  (list make-static-info (add-color *color-3* "]-[sda"))
+  (list make-static-info (string-append (set-y-zero-to-center) (add-color *color-3* "]-[sda")))
   (list make-static-info (canvas *graph-width* *graph-height* *color-4*))
-  (list store-history sda-stat diff-prepare truncate-scale-list generate-splitted-multi-bar (sda-stat) (make-list *number-of-bar* (list 0 0 0)) *normal-refresh-time*)
+  (list store-history sda-stat diff-prepare truncate-scale-list generate-splitted-multi-bar (sda-stat) (make-list *number-of-bar* (list 0 0 0)) *normal-refresh-time* '())
   
   
   
   ;; disabled because usually do not use swap
-  ;;(list make-static-info (add-color *color-3* "]-[swap"))
+  ;;(list make-static-info (string-append (set-y-zero-to-center) (add-color *color-3* "]-[swap")))
   ;;(list make-static-info (canvas *graph-width* *graph-height* *color-4*))
-  ;;(list store-history swap-stat diff-prepare truncate-scale-list generate-splitted-multi-bar (swap-stat) (make-list *number-of-bar* (list 0 0 0)) *normal-refresh-time*)
+  ;;(list store-history swap-stat diff-prepare truncate-scale-list generate-splitted-multi-bar (swap-stat) (make-list *number-of-bar* (list 0 0 0)) *normal-refresh-time* '())
   
   
   
   ;; ============================== danger! eat cpu
-  (list make-static-info (add-color *color-3* "]-[fs"))
+  (list make-static-info (string-append (set-y-zero-to-center) (add-color *color-3* "]-[fs")))
   (list make-static-info (canvas (+ (* (+ (* *font-horizontal-size* 7) *bar-horizontal-space* *bar-width* ) (length *list-fs*)) *bar-horizontal-space*) *graph-height* *color-4*))  ;; 7=(+ 1 5 1) 1=space 5=Available 1=fs-char ; fixme last *bar-horizontal-space* ??
-  (list store-history fs-stat no-diff-prepare fs-scale fs-draw (fs-stat) (list (cdr (fs-stat))) *slow-refresh-time*)
+  (list store-history fs-stat no-diff-prepare fs-scale fs-draw (fs-stat) (list (cdr (fs-stat))) *slow-refresh-time* '())
   
   
   
   ;; ============================== danger! eat cpu
-  (list make-static-info (add-color *color-3* "]-[top"))
+  (list make-static-info (string-append (set-y-zero-to-center) (add-color *color-3* "]-[top")))
   (list make-static-info (canvas (+ (* *font-horizontal-size* *ps-top-name-length* *ps-top-show*) (* *bar-horizontal-space* *ps-top-show*) *bar-horizontal-space*) *graph-height* *color-4*)) ;; fixme (+ ... *bar-horizontal-space*) very strange
-  (list store-history top-stat no-diff-prepare truncate-scale-list top-draw (top-stat) (list (cdr (top-stat))) *slow-refresh-time*)
+  (list store-history top-stat no-diff-prepare truncate-scale-list top-horizontal-draw (top-stat) (list (cdr (top-stat))) *slow-refresh-time* '())
   
   
   
-  (list make-static-info (add-color *color-3* "]-[mem"))
+  (list make-static-info (string-append (set-y-zero-to-center) (add-color *color-3* "]-[mem")))
   (list make-static-info (canvas (+ (* *bar-width* 2) (* (+ *bar-horizontal-space* *element-horizontal-space*) 3)) *graph-height* *color-4*))
-  (list store-history mem-stat no-diff-prepare truncate-scale-list mem-draw (mem-stat) (list (cdr (mem-stat))) *normal-refresh-time*)
+  (list store-history mem-stat no-diff-prepare truncate-scale-list mem-draw (mem-stat) (list (cdr (mem-stat))) *normal-refresh-time* '())
   
   
   
-  (list make-static-info (add-color *color-3* "]-[t"))
+  (list make-static-info (string-append (set-y-zero-to-center) (add-color *color-3* "]-[t")))
   (list make-static-info (canvas (+ (* (+ (* *font-horizontal-size* 2) *bar-width* *bar-horizontal-space*) (length *list-thermal*)) *bar-horizontal-space*) *graph-height* *color-4*)) ;; fixme (+ ... *bar-horizontal-space*) very strange
-  (list store-history thermo-stat no-diff-prepare round-scale thermo-draw (thermo-stat) (list (cdr (thermo-stat))) *normal-refresh-time*)
+  (list store-history thermo-stat no-diff-prepare round-scale thermo-draw (thermo-stat) (list (cdr (thermo-stat))) *normal-refresh-time* '())
   
   
   
   ;; ============================== danger! eat many cpu and "pacmd ?" write information to disk evry refresh!
-  ;;(list make-static-info (add-color *color-3* "]-[snd"))
+  ;;(list make-static-info (string-append (set-y-zero-to-center) (add-color *color-3* "]-[snd")))
   ;;(list make-static-info (canvas *graph-height* *graph-height* *color-4*))
-  ;;(list store-history pulseaudio-stat no-diff-prepare round-scale pulseaudio-draw (pulseaudio-stat) (list (cdr (pulseaudio-stat))) *slow-refresh-time*)
+  ;;(list store-history pulseaudio-stat no-diff-prepare round-scale pulseaudio-draw (pulseaudio-stat) (list (cdr (pulseaudio-stat))) *slow-refresh-time* '())
   
   
   
-  (list make-static-info (add-color *color-3* "]-"))
+  (list make-static-info (string-append (set-y-zero-to-center) (add-color *color-3* "]-")))
   ))
 
 

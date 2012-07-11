@@ -77,10 +77,53 @@
 
 (define *cpu-max-val* (* 100 *cpu-quantity*)) ;; if num-of-cpu=2 => max-cpu-val=200%     the final value is also dependent on the time of accumulation (see cpu-diff-prepare)
 
+(define *half-graph-height* (truncate (/ *graph-height* 2)))
 
 
 
+(define (generate-grounded-bar x y w h color)
+  ;; 
+  ;;^fg(white)^p(1)^r(3x5+0-6)
+  ;;    color  position
+  ;;             1   --> gcpubar -s g -w 100 -h 10 -gs <<1>> -gw 2
+  ;;                rectangle WIDTHxHEIGHT±X±Y
+  ;; first need to install the y-axis on the bottom edge  
+  (format #f "^fg(#~6,'0x)^r(~dx~d~@d~@d)"
+	  color
+	  w
+	  h
+	  x
+	  (- 0 y h *vertical-border*)));;
 
+
+
+(define (canvas width height color)
+  (string-append (set-y-zero-to-bottom)
+		 (generate-grounded-bar 0 0 width height color)
+		 (format #f "^p(-~d)" width)))
+
+(define (set-y-zero-to-bottom) ;; fixme need example
+  ;; command ^p(_BOTTOM) adds 3 pixels between the elements
+  ;; example: between red and green rectangle 3 pixels, between green and blue rectangle 0 pixels
+  ;;  echo "^p()^fg(#FF0000)^r(10x19+0+0)^p(_BOTTOM)^fg(#00FF00)^r(10x19+0-20)^p()^fg(#0000FF)^r(10x19+0+0)"| dzen2 -h 21 -p
+  "^p(_BOTTOM)^p(-3)")
+
+
+(define (set-y-zero-to-center)
+  "^p()")
+
+(define (set-lock-x)
+  "^p(_LOCK_X)")
+
+(define (set-unlock-x)
+  "^p(_UNLOCK_X)")
+
+
+(define (create-space width)
+     (format #f "^p(~d)" width))
+
+(define (img filename)
+  (format #f "^i(~a)" filename))
 
 
 
@@ -104,7 +147,7 @@
 	(list-head (map match:substring (list-matches "[^ \n]+" (system-with-output-to-string "ps --no-headers -A -o pcpu,comm --sort=-pcpu" ))) (* 2 *ps-top-show*))))
 
 
-(define (top-draw func-scale x-list)
+(define (top-horizontal-draw func-scale x-list)
   (define (top-generator lst result)
     (if (null? lst)
 	result
@@ -116,7 +159,9 @@
 			  (if (< pcpu *ps-top-above*)
 			      (format #f "^p(~d)~a" *bar-horizontal-space* (make-string *ps-top-name-length* #\space)) ;; ^p(+1) because (generate-grounded-bar *bar-horizontal-space* ...) also add space
 			      (string-append 
+			       (set-y-zero-to-bottom)
 			       (generate-grounded-bar *bar-horizontal-space* 0 pcpu-scalled *bar-height* *color-3*)
+			       (set-y-zero-to-center)
 			       (format #f "^p(-~d)~a" pcpu-scalled (string-pad-right (string-cut comm 0 *ps-top-name-length*) *ps-top-name-length*))))
 			  result)))))
   
@@ -250,15 +295,17 @@
 (define (thermo-draw func-scale thermo-list)
   ;; thermo-list === (... (t permissible_limit maximum_limit) ...)
   (map (lambda (x) (let ((thermo (car x)))
-		     (format #f "~a~2,'0d"
-			     (generate-grounded-bar *bar-horizontal-space*
-						    0
-						    *bar-width*
-						    (func-scale thermo 0 100 0 *graph-height*)
-						    (cond ((< thermo (cadr x))  *color-1*)   ;; permissible_limit
-							  ((> thermo (caddr x)) *color-5*)   ;; maximum_limit
-							  (else                  *color-0*))) ;; normal
-			     thermo)))
+		     (string-append 
+		      (set-y-zero-to-bottom)
+		      (generate-grounded-bar *bar-horizontal-space*
+					     0
+					     *bar-width*
+					     (func-scale thermo 0 100 0 *graph-height*)
+					     (cond ((< thermo (cadr x))  *color-1*)   ;; permissible_limit
+						   ((> thermo (caddr x)) *color-5*)   ;; maximum_limit
+						   (else                  *color-0*))) ;; normal
+		      (set-y-zero-to-center)
+		      (format #f "~2,'0d" thermo))))
        (car thermo-list)))
 
 
@@ -346,12 +393,14 @@
 (define (fs-draw func-scale x-list)
   (map (lambda (x)
 	 (string-append
+	  (set-y-zero-to-center)
 	  (format "^fg(#~6,'0x) ~a~a"
 		  (if (> (caddr x) *fs-limit*) *color-5* *color-3*)
 		  (cadr x)
 		  (string-pad (cadddr x) 5))
+	  (set-y-zero-to-bottom)
 	  (string-join (generate-incremental-multi-bar func-scale (list (list (caddr x) (- 100 (caddr x))))) "")))
-	(car x-list))) ;; car because need only one element of history
+       (car x-list))) ;; car because need only one element of history
 
 
 
@@ -382,8 +431,10 @@
 
 
 
+
 (define (truncate-scale-list x in-min in-max out-min out-max)
   (map (lambda (element) (truncate (scale element in-min in-max out-min out-max))) x))
+
 
 (define (round-scale x in-min in-max out-min out-max)
   (round (scale x in-min in-max out-min out-max)))
@@ -392,32 +443,6 @@
 
 
 
-(define (generate-grounded-bar x y w h color)
-  ;; 
-  ;;^fg(white)^p(1)^r(3x5+0-6)
-  ;;    color  position
-  ;;             1   --> gcpubar -s g -w 100 -h 10 -gs <<1>> -gw 2
-  ;;                rectangle WIDTHxHEIGHT±X±Y
-  (format #f "^fg(#~6,'0x)^r(~dx~d~@d~@d)";;"^fg(#~6,'0x)^p(~@d)^r(~dx~d~@d~@d)"
-	  color
-	  ;;x
-	  w
-	  h
-	  x
-	  (- (ceiling (- (/ *graph-height* 2) (/ h 2))) y)))
-
-
-
-
-(define (canvas width height color)
-  (string-append (generate-grounded-bar 0 0 width height color)
-		 (format #f "^p(-~d)" width)))
-
-(define (create-space width)
-     (format #f "^p(~d)" width))
-
-(define (img filename)
-  (format #f "^i(~a)" filename))
 
 
 
@@ -426,11 +451,12 @@
   (list
    (cond ;; function is not called if the sum of all columns is less than 1. but the first column can be null, and the other does not. if the first does not draw (or simulate) the remaining columns will move and paint over the previous colonnade, and the total width of the graph is reduced to the width of the column plus the margin 
     ((and (= h 0) (> num 0))  "") ;; do not draw a small column
-    ((and (= h 0) (> num 0)) (format #f "^p(~d)" (+ *bar-horizontal-space* *bar-width* ))) ;; simulate space+bar, because: function is not called if the sum of all columns is less than 1. but the first column can be null, and the other does not. if the first does not draw (or simulate) the remaining columns will move and paint over the previous colonnade, and the total width of the graph is reduced to the width of the column plus the margin 
-    (else (generate-grounded-bar (if (= num 0) *bar-horizontal-space* (- *bar-width*))
-				 prev-height
-				 *bar-width*
-				 h
+    ((and (= h 0) (= num 0)) (create-space (+ *bar-horizontal-space* *bar-width* ))) ;; simulate space+bar, because: function is not called if the sum of all columns is less than 1. but the first column can be null, and the other does not. if the first does not draw (or simulate) the remaining columns will move and paint over the previous colonnade, and the total width of the graph is reduced to the width of the column plus the margin 
+
+    (else (generate-grounded-bar (if (= num 0) *bar-horizontal-space* (- *bar-width*)) ;; x
+				 0                                                     ;; y
+				 *bar-width*                                           ;; w
+				 h                                                     ;; h
 				 (cond ((= num 0) *color-0*)  ;; system 
 				       ((= num 1) *color-1*)  ;; user
 				       ((= num 2) *color-2*)  ;; nice
@@ -449,13 +475,17 @@
 	    (cons (car res-txt-shift) (multi-bar (cdr lst) (cadr res-txt-shift) (+ num 1)))))))
   
   (let* ((max-val (max (apply max (map (lambda (x) (apply + x)) x-list)))) ;; max increment
-	 (real-height (- *graph-height* (* *bar-vertical-space* (- (length (car x-list)) 1)))) ;; 1#2#3 number of "#" === (- length 1) === 2 ;; fixme: need only count the distance between the non-zero columns (short columns are not shown), but the resultant height of the columns (especially the small columns), depends on the distance between the columns. Otherwise, the top will often be an empty space, even when wholly loaded, due to rounding error
+	 (real-height (- *graph-height* (* *bar-vertical-space* (- (length (car (last-pair x-list))) 1)))) ;; 1#2#3 number of "#" === (- length 1) === 2 ;; fixme: need only count the distance between the non-zero columns (short columns are not shown), but the resultant height of the columns (especially the small columns), depends on the distance between the columns. Otherwise, the top will often be an empty space, even when wholly loaded, due to rounding error
 	 (y-list (map (lambda (x) (func-scale x 0 max-val 0 real-height)) x-list)))
-    
+
     (map (lambda (lst)
 	   (if (< (apply + lst) 1)
-	       (format #f "^p(~d)" (+ *bar-horizontal-space* *bar-width*)) ;; create a emptiness, if the total height of the column is less than 1
-	       (string-join (multi-bar lst 0 0) "")))
+	       (create-space (+ *bar-horizontal-space* *bar-width*)) ;; create a emptiness, if the total height of the column is less than 1
+	       (string-append (set-y-zero-to-bottom)
+			      ;;(set-lock-x)
+			      (string-join (multi-bar lst *vertical-border* 0) "")
+			      ;;(set-unlock-x)
+			      )))
 	 y-list)))
 
 
@@ -464,33 +494,22 @@
 
 
 
-(define (generate-splitted-particle-bar y num)
-  ;; 
-  ;;^fg(white)^p(1)^r(3x5+0-6)
-  ;;    color  position
-  ;;             1   --> gcpubar -s g -w 100 -h 10 -gs <<1>> -gw 2
-  ;;                rectangle WIDTHxHEIGHT±X±Y
-  ;;
-  ;; num - index number of element in list
-  ;; 
-  (if (and (= y 0) (> num 0))
-      ""  ;; do not draw small column
-      (let* ((y-shift (if (= num 0)
-			  (- 0 (floor (/ (+ y *bar-vertical-space*) 2)))    ;; in
-			  (+ 0 (ceiling (/ (+ y *bar-vertical-space*) 2)))))) ;; out
-	
-	(format #f "^fg(#~6,'0x)^p(~d)^r(~dx~d~@d~@d)"
-		;;(cond ((< y (* *graph-height* (/ 1 3))) #x777777)
-		;;  ((< y (* *graph-height* (/ 2 3))) #xAAAAAA)
-		;;(else #xFFFFFF))
-		(cond ((= num 0) *color-1*)  ;; in   ;; fixme: strange color1 for 0; and color0 for 1;
-		      ((= num 1) *color-0*)  ;; out
-		      (else      *color-1*)) ;; in        ;;(ash color 8)
-		(if (= num 0) *bar-horizontal-space* (- *bar-width*))
-		*bar-width*
-		y
-		0
-		y-shift))))
+(define (generate-splitted-particle-bar h num) ;; fixme need to use *half-graph-height*
+  (cond ;; function is not called if the sum of all columns is less than 1. but the first column can be null, and the other does not. if the first does not draw (or simulate) the remaining columns will move and paint over the previous colonnade, and the total width of the graph is reduced to the width of the column plus the margin 
+   ((and (= h 0) (> num 0))  "") ;; do not draw a small column
+   ((and (= h 0) (> num 0)) (create-space (+ *bar-horizontal-space* *bar-width* ))) ;; simulate space+bar, because: function is not called if the sum of all columns is less than 1. but the first column can be null, and the other does not. if the first does not draw (or simulate) the remaining columns will move and paint over the previous colonnade, and the total width of the graph is reduced to the width of the column plus the margin 
+
+   (else (generate-grounded-bar (if (= num 0) *bar-horizontal-space* (- *bar-width*)) ;; x
+				(if (= num 0)                                         ;; y
+				    (- *half-graph-height* h)                                           ;; in
+				    0)  ;;  *bar-vertical-space* already added by generate-grounded-bar ;; out
+				*bar-width*                                           ;; w
+				h                                                     ;; h
+				(cond ((= num 0) *color-0*)  ;; system 
+				      ((= num 1) *color-1*)  ;; user
+				      ((= num 2) *color-2*)  ;; nice
+				      (else      *color-3*)))))) ;; fixme need more color
+
 
 
 
@@ -503,12 +522,13 @@
   
   (let* ((max-val (max (apply max (map (lambda (x) (apply max x)) x-list)))) ;; max from all
 	 (real-height (truncate (/ (- *graph-height* *bar-vertical-space*) 2)))
-	 (y-list (map (lambda (x) (func-scale x 0 max-val 0 real-height)) x-list)))
+	 (y-list (map (lambda (x) (func-scale x 0 max-val 0 real-height)) x-list))
+	 (z-list (map reverse y-list))) ;; painting is in the following order: first the lower column, and then the top. Because of this early to be out (tx) and then in (rx), or the need to turn in / out -> out / in before rendering
     (map (lambda (lst)
 	   (if (< (apply + lst) 1)
-	       (format #f "^p(~d)" (+ *bar-width* *bar-horizontal-space*)) ;; skip if zero hight of all bar
-	       (string-join (multi-bar lst 0) "")))
-	 y-list)))
+	       (create-space (+ *bar-width* *bar-horizontal-space*)) ;; skip if zero hight of all bar
+	       (string-append (set-y-zero-to-bottom) (string-join (multi-bar lst 0) ""))))
+	 z-list)))
 
 
 
@@ -523,7 +543,7 @@
 
 
 
-(define (store-history func-read-raw func-prepare func-scale func-draw old-raw history-list refresh-time)
+(define (store-history func-read-raw func-prepare func-scale func-draw old-raw history-list refresh-time old-aa)
   ;; func-read-raw function returns a timestamp and a list of values
   ;;               (1234567890 3500 1700)
   ;;
@@ -545,17 +565,24 @@
   ;; history-list  historical list of unscaled values
   ;;               ((6927 3174) (3000 1000))
   ;;
-  (if (< (runtime) (+ (car old-raw) refresh-time))
+  ;; old-aa        old ascii-art need if function called when timestamp not overdue
+  ;;               how better:
+  ;;               to eat processor (generating the same rectangles)
+  ;;               or
+  ;;               eat-in memory (using rectangles created by the last time)?
+
+  (if (and (< (runtime) (+ (car old-raw) refresh-time)) (not (null? old-aa)))
 	  
       (begin  ;; if not timestamp overdue, then restore from the history
-  	(map display (func-draw func-scale history-list))
-	(list store-history func-read-raw func-prepare func-scale func-draw old-raw history-list refresh-time))
+  	(map display old-aa)
+	(list store-history func-read-raw func-prepare func-scale func-draw old-raw history-list refresh-time old-aa))
       
       (let* ((new-raw (func-read-raw)) ;; if the timestamp is overdue then update
 	     (new (func-prepare new-raw old-raw))
-	     (new-history-list (append (cdr history-list) (list new))))
-	(map display (func-draw func-scale new-history-list))
-	(list store-history func-read-raw func-prepare func-scale func-draw new-raw new-history-list refresh-time))))
+	     (new-history-list (append (cdr history-list) (list new)))
+	     (aa (func-draw func-scale new-history-list)))
+	(map display aa)
+	(list store-history func-read-raw func-prepare func-scale func-draw new-raw new-history-list refresh-time aa))))
 
 
 
@@ -563,6 +590,7 @@
 
 
 (define (make-static-info str)
+  ;;(list (set-y-zero-to-center) ;;  fixme
   (format #t "~a" str)
   (list make-static-info str))
 
@@ -588,6 +616,8 @@
     (display "^fg()")
     (newline)
     (force-output *stdout*)
-    
+
     (sleep *minimum-refresh-time*)
     (dzinn new-lst)))
+
+
