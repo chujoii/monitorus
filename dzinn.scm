@@ -82,7 +82,6 @@
 
 
 
-
 (define (generate-grounded-bar x y w h color)
   ;; 
   ;;^fg(white)^p(1)^r(3x5+0-6)
@@ -128,6 +127,7 @@
   (format #f "^i(~a)" filename))
 
 
+(define *empty-bar* (create-space (+ *bar-horizontal-space* *bar-width* )))
 
 
 
@@ -155,7 +155,7 @@
     (if (null? lst)
 	result
 	(let* ((pcpu (inexact->exact (string->number (car lst))))
-	       (pcpu-scalled (truncate (scale pcpu 0 100 0 (* *ps-top-name-length* *font-horizontal-size*))))
+	       (pcpu-scalled (truncate (scale-proportional pcpu 100 (* *ps-top-name-length* *font-horizontal-size*))))
 	       (comm (cadr lst)))
 	  (top-generator (cddr lst)
 			 (cons
@@ -177,7 +177,7 @@
     (if (null? lst)
 	result
 	(let* ((pcpu (inexact->exact (string->number (car lst))))
-	       (pcpu-scalled (truncate (scale pcpu 0 100 0 (* *ps-top-name-length* *font-horizontal-size*))))
+	       (pcpu-scalled (truncate (scale-proportional pcpu 100 (* *ps-top-name-length* *font-horizontal-size*))))
 	       (comm (cadr lst)))
 	  (top-generator (cddr lst)
 			 (cons
@@ -277,7 +277,7 @@
   ;; fixme need to use dB?
   (if (< (caar volume) 0)
       (list (add-color *color-3* " >X<")) ;; mute
-      (let* ((new-volume (func-scale (caar volume) 0 100 0 90))
+      (let* ((new-volume (func-scale (caar volume) 100 90))
 	     (shift (* 2 *bar-horizontal-space*))
 	     (d0 *graph-height*)
 	     (d1 (- d0 (* 2 shift)))
@@ -326,7 +326,7 @@
 		      (generate-grounded-bar *bar-horizontal-space*
 					     *vertical-border*
 					     *bar-width*
-					     (func-scale thermo 0 100 0 *graph-height*)
+					     (func-scale thermo 100 *graph-height*)
 					     (cond ((< thermo (cadr x))  *color-1*)   ;; permissible_limit
 						   ((> thermo (caddr x)) *color-5*)   ;; maximum_limit
 						   (else                  *color-0*))) ;; normal
@@ -358,9 +358,9 @@
 
 
 
-(define (cpu-scale x in-min in-max out-min out-max)
+(define (cpu-scale x in-max out-max)
   ;;                                                     ignore in-max
-  (map (lambda (element) (round (scale element in-min *cpu-max-val* out-min out-max))) x))
+  (map (lambda (element) (round (scale-proportional element *cpu-max-val* out-max))) x))
 
 
 
@@ -438,10 +438,10 @@
   (cdr new-val)) ;; remove timestamp
 
 
-(define (fs-scale x in-min in-max out-min out-max)
+(define (fs-scale x in-max out-max)
   ;; ignore in-min ->   0
   ;; ignore in-max -> 100
-  (map (lambda (element) (truncate (scale element 0 100 out-min out-max))) x))
+  (map (lambda (element) (truncate (scale-proportional element 100 out-max))) x))
 
      
 (define (diff-prepare new-val old-val)
@@ -458,12 +458,12 @@
 
 
 
-(define (truncate-scale-list x in-min in-max out-min out-max)
-  (map (lambda (element) (truncate (scale element in-min in-max out-min out-max))) x))
+(define (truncate-scale-list x in-max out-max)
+  (map (lambda (element) (truncate (scale-proportional element in-max out-max))) x))
 
 
-(define (round-scale x in-min in-max out-min out-max)
-  (round (scale x in-min in-max out-min out-max)))
+(define (round-scale x in-max out-max)
+  (round (scale-proportional x in-max out-max)))
 
 
 
@@ -477,7 +477,7 @@
   (list
    (cond ;; function is not called if the sum of all columns is less than 1. but the first column can be null, and the other does not. if the first does not draw (or simulate) the remaining columns will move and paint over the previous colonnade, and the total width of the graph is reduced to the width of the column plus the margin 
     ((and (= h 0) (> num 0))  "") ;; do not draw a small column
-    ((and (= h 0) (= num 0)) (create-space (+ *bar-horizontal-space* *bar-width* ))) ;; simulate space+bar, because: function is not called if the sum of all columns is less than 1. but the first column can be null, and the other does not. if the first does not draw (or simulate) the remaining columns will move and paint over the previous colonnade, and the total width of the graph is reduced to the width of the column plus the margin 
+    ((and (= h 0) (= num 0)) *empty-bar*) ;; simulate space+bar, because: function is not called if the sum of all columns is less than 1. but the first column can be null, and the other does not. if the first does not draw (or simulate) the remaining columns will move and paint over the previous colonnade, and the total width of the graph is reduced to the width of the column plus the margin 
 
     (else (generate-grounded-bar (if (= num 0) *bar-horizontal-space* (- *bar-width*)) ;; x
 				 prev-height                                           ;; y
@@ -502,12 +502,12 @@
   
   (let* ((max-val (max (apply max (map (lambda (x) (apply + x)) x-list)))) ;; max increment
 	 (real-height (- *graph-height* (* *bar-vertical-space* (- (length (car (last-pair x-list))) 1)))) ;; 1#2#3 number of "#" === (- length 1) === 2 ;; fixme: need only count the distance between the non-zero columns (short columns are not shown), but the resultant height of the columns (especially the small columns), depends on the distance between the columns. Otherwise, the top will often be an empty space, even when wholly loaded, due to rounding error
-	 (y-list (map (lambda (x) (func-scale x 0 max-val 0 real-height)) x-list)))
+	 (y-list (map (lambda (x) (func-scale x max-val real-height)) x-list)))
 
 
     (map (lambda (lst)
 	   (if (< (apply + lst) 1)
-	       (create-space (+ *bar-horizontal-space* *bar-width*)) ;; create a emptiness, if the total height of the column is less than 1
+	       *empty-bar* ;; create a emptiness, if the total height of the column is less than 1
 	       (string-append (set-y-zero-to-bottom)
 			      ;;(set-lock-x)
 			      (string-join (multi-bar lst *vertical-border* 0) "")
@@ -546,12 +546,12 @@
 	(cons (generate-splitted-particle-bar (car lst) num) (multi-bar (cdr lst) (+ num 1)))))
   
   (let* ((max-val (max (apply max (map (lambda (x) (apply max x)) x-list)))) ;; max from all
-	 (y-list (map (lambda (x) (func-scale x 0 max-val 0 *real-height-splitted-bar*)) x-list))
+	 (y-list (map (lambda (x) (func-scale x max-val *real-height-splitted-bar*)) x-list))
 	 (z-list (map reverse y-list))) ;; painting is in the following order: first the lower column, and then the top. Because of this early to be out (tx) and then in (rx), or the need to turn in / out -> out / in before rendering
 
     (map (lambda (lst)
 	   (if (< (apply + lst) 1)
-	       (create-space (+ *bar-width* *bar-horizontal-space*)) ;; skip if zero hight of all bar
+	       *empty-bar* ;; skip if zero hight of all bar
 	       (string-append (set-y-zero-to-bottom) (string-join (multi-bar lst 0) ""))))
 	 z-list)))
 
