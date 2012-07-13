@@ -43,16 +43,19 @@
 
 (define *minimum-refresh-time* 3) ;; in seconds
 (define *normal-refresh-time* 3) ;; in seconds
-(define *slow-refresh-time* 30) ;; in seconds (for functions that eat up a lot of cpu)
+(define *slow-refresh-time* 9) ;; in seconds (for functions that eat up a lot of cpu)
 
 (define *graph-width* 61) ;; (+ (* (/ time-interval-that-you-want-to-see-from-the-chart *normal-refresh-time*) (+ *bar-width* *bar-horizontal-space*)) *bar-horizontal-space*) =for-example= (+ (* (/ 60 3) (+ 2 1)) 1) = 61
 (define *graph-height* 19) ;; check *bar-vertical-space*
 (define *bar-width* 2)
-(define *bar-height* 2)
+(define *bar-height* 1)
 (define *bar-horizontal-space* 1)
 (define *bar-vertical-space* 1) ;; check *graph-height*
 (define *element-horizontal-space* 1)
+(define *element-vertical-space* 1)
 (define *font-horizontal-size* 5)
+(define *font-vertical-size* 7)
+(define *font-strange-number* 3) ;; fixme
 
 ;; to emulate the frame around the graph, you can set 
 ;; the height of the graph *graph-height* is less than the actual height of the graph in dzen
@@ -160,7 +163,7 @@
   
   (list make-static-info (string-append (set-y-zero-to-center) (add-color *color-3* "]-[sda")))
   (list make-static-info (canvas *graph-width* *graph-height* *color-4*))
-  (list store-history sda-stat diff-prepare truncate-scale-list generate-splitted-multi-bar (sda-stat) (make-list *number-of-bar* (list 0 0 0)) *normal-refresh-time* '())
+  (list store-history sda-stat diff-prepare truncate-scale-list generate-splitted-multi-bar (sda-stat) (make-list *number-of-bar* (list 0 0)) *normal-refresh-time* '())
   
   
   
@@ -179,9 +182,16 @@
   
   
   ;; ============================== danger! eat cpu
+  ;(list make-static-info (string-append (set-y-zero-to-center) (add-color *color-3* "]-[top")))
+  ;(list make-static-info (canvas (+ (* *font-horizontal-size* *ps-top-name-length* *ps-top-show*) (* *bar-horizontal-space* *ps-top-show*) *bar-horizontal-space*) *graph-height* *color-4*)) ;; fixme (+ ... *bar-horizontal-space*) very strange
+  ;(list store-history top-stat no-diff-prepare truncate-scale-list top-horizontal-draw (top-stat) (list (cdr (top-stat))) *slow-refresh-time* '())
+  ;;
+  ;; or
+  ;;
+  ;; ============================== danger! eat cpu
   (list make-static-info (string-append (set-y-zero-to-center) (add-color *color-3* "]-[top")))
-  (list make-static-info (canvas (+ (* *font-horizontal-size* *ps-top-name-length* *ps-top-show*) (* *bar-horizontal-space* *ps-top-show*) *bar-horizontal-space*) *graph-height* *color-4*)) ;; fixme (+ ... *bar-horizontal-space*) very strange
-  (list store-history top-stat no-diff-prepare truncate-scale-list top-horizontal-draw (top-stat) (list (cdr (top-stat))) *slow-refresh-time* '())
+  (list make-static-info (canvas (+ (* *font-horizontal-size* *ps-top-name-length*) (* *bar-horizontal-space* *ps-top-show*) *bar-horizontal-space*) *graph-height* *color-4*)) ;; fixme (+ ... *bar-horizontal-space*) very strange
+  (list store-history top-stat no-diff-prepare truncate-scale-list top-vertical-draw (top-stat) (list (cdr (top-stat))) *slow-refresh-time* '())
   
   
   

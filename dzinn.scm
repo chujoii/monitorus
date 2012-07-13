@@ -77,7 +77,9 @@
 
 (define *cpu-max-val* (* 100 *cpu-quantity*)) ;; if num-of-cpu=2 => max-cpu-val=200%     the final value is also dependent on the time of accumulation (see cpu-diff-prepare)
 
-(define *half-graph-height* (truncate (/ *graph-height* 2)))
+(define *real-height-splitted-bar* (truncate (/ (- *graph-height* *bar-vertical-space*) 2)))
+(define *half-graph-with-border-height* (+ *real-height-splitted-bar* *vertical-border*))
+
 
 
 
@@ -93,13 +95,13 @@
 	  w
 	  h
 	  x
-	  (- 0 y h *vertical-border*)));;
+	  (- 0 y h)));;
 
 
 
 (define (canvas width height color)
   (string-append (set-y-zero-to-bottom)
-		 (generate-grounded-bar 0 0 width height color)
+		 (generate-grounded-bar 0 *vertical-border* width height color)
 		 (format #f "^p(-~d)" width)))
 
 (define (set-y-zero-to-bottom) ;; fixme need example
@@ -143,6 +145,7 @@
 
 (define (top-stat)
   ;; fixme: probably better to use a different algorithm http://forums.anandtech.com/showthread.php?t=297729
+  ;; fixme (if (< pcpu *ps-top-above*) (format #f "^p(~d)~a" *bar-horizontal-space* (make-string *ps-top-name-length* #\space)) ;; ^p(+1) because (generate-grounded-bar *bar-horizontal-space* ...) also add space
   (cons (runtime)
 	(list-head (map match:substring (list-matches "[^ \n]+" (system-with-output-to-string "ps --no-headers -A -o pcpu,comm --sort=-pcpu" ))) (* 2 *ps-top-show*))))
 
@@ -156,16 +159,39 @@
 	       (comm (cadr lst)))
 	  (top-generator (cddr lst)
 			 (cons
-			  (if (< pcpu *ps-top-above*)
-			      (format #f "^p(~d)~a" *bar-horizontal-space* (make-string *ps-top-name-length* #\space)) ;; ^p(+1) because (generate-grounded-bar *bar-horizontal-space* ...) also add space
-			      (string-append 
-			       (set-y-zero-to-bottom)
-			       (generate-grounded-bar *bar-horizontal-space* 0 pcpu-scalled *bar-height* *color-3*)
-			       (set-y-zero-to-center)
-			       (format #f "^p(-~d)~a" pcpu-scalled (string-pad-right (string-cut comm 0 *ps-top-name-length*) *ps-top-name-length*))))
+			  (string-append 
+			   (set-y-zero-to-bottom)
+			   (generate-grounded-bar *bar-horizontal-space* *vertical-border* pcpu-scalled *bar-height* *color-0*)
+			   (set-y-zero-to-center)
+			   (add-color *color-3* "")
+			   (format #f "^p(-~d)~a" pcpu-scalled (string-pad-right (string-cut comm 0 *ps-top-name-length*) *ps-top-name-length*)))
 			  result)))))
   
   (reverse (top-generator (car x-list) '())))
+
+
+
+
+(define (top-vertical-draw func-scale x-list)
+  (define (top-generator lst result)
+    (if (null? lst)
+	result
+	(let* ((pcpu (inexact->exact (string->number (car lst))))
+	       (pcpu-scalled (truncate (scale pcpu 0 100 0 (* *ps-top-name-length* *font-horizontal-size*))))
+	       (comm (cadr lst)))
+	  (top-generator (cddr lst)
+			 (cons
+			  (string-append 
+			   (generate-grounded-bar 0 *element-vertical-space* pcpu-scalled *bar-height* *color-0*)
+			   (format #f "^p(;~@d)" (- 0 *bar-height* *font-vertical-size* *element-vertical-space*))
+			   (add-color *color-3* (string-pad-right (string-cut comm 0 *ps-top-name-length*) *ps-top-name-length*)))
+			  result)))))
+  (append (list
+	   (set-y-zero-to-bottom)
+	   (set-lock-x))
+	  (top-generator (car x-list) '())
+	  (list (set-unlock-x)
+		(create-space (+ (* *font-horizontal-size* *ps-top-name-length*) (* *bar-horizontal-space* *ps-top-show*) *bar-horizontal-space*)))))
 
 
 
@@ -298,7 +324,7 @@
 		     (string-append 
 		      (set-y-zero-to-bottom)
 		      (generate-grounded-bar *bar-horizontal-space*
-					     0
+					     *vertical-border*
 					     *bar-width*
 					     (func-scale thermo 0 100 0 *graph-height*)
 					     (cond ((< thermo (cadr x))  *color-1*)   ;; permissible_limit
@@ -454,14 +480,14 @@
     ((and (= h 0) (= num 0)) (create-space (+ *bar-horizontal-space* *bar-width* ))) ;; simulate space+bar, because: function is not called if the sum of all columns is less than 1. but the first column can be null, and the other does not. if the first does not draw (or simulate) the remaining columns will move and paint over the previous colonnade, and the total width of the graph is reduced to the width of the column plus the margin 
 
     (else (generate-grounded-bar (if (= num 0) *bar-horizontal-space* (- *bar-width*)) ;; x
-				 0                                                     ;; y
+				 prev-height                                           ;; y
 				 *bar-width*                                           ;; w
 				 h                                                     ;; h
 				 (cond ((= num 0) *color-0*)  ;; system 
 				       ((= num 1) *color-1*)  ;; user
 				       ((= num 2) *color-2*)  ;; nice
 				       (else      *color-3*))))) ;; fixme need more color
-   (+ prev-height h *bar-vertical-space*)))
+   *bar-vertical-space*))
 
 
 
@@ -477,6 +503,7 @@
   (let* ((max-val (max (apply max (map (lambda (x) (apply + x)) x-list)))) ;; max increment
 	 (real-height (- *graph-height* (* *bar-vertical-space* (- (length (car (last-pair x-list))) 1)))) ;; 1#2#3 number of "#" === (- length 1) === 2 ;; fixme: need only count the distance between the non-zero columns (short columns are not shown), but the resultant height of the columns (especially the small columns), depends on the distance between the columns. Otherwise, the top will often be an empty space, even when wholly loaded, due to rounding error
 	 (y-list (map (lambda (x) (func-scale x 0 max-val 0 real-height)) x-list)))
+
 
     (map (lambda (lst)
 	   (if (< (apply + lst) 1)
@@ -494,21 +521,19 @@
 
 
 
-(define (generate-splitted-particle-bar h num) ;; fixme need to use *half-graph-height*
+(define (generate-splitted-particle-bar h num)
   (cond ;; function is not called if the sum of all columns is less than 1. but the first column can be null, and the other does not. if the first does not draw (or simulate) the remaining columns will move and paint over the previous colonnade, and the total width of the graph is reduced to the width of the column plus the margin 
    ((and (= h 0) (> num 0))  "") ;; do not draw a small column
-   ((and (= h 0) (> num 0)) (create-space (+ *bar-horizontal-space* *bar-width* ))) ;; simulate space+bar, because: function is not called if the sum of all columns is less than 1. but the first column can be null, and the other does not. if the first does not draw (or simulate) the remaining columns will move and paint over the previous colonnade, and the total width of the graph is reduced to the width of the column plus the margin 
+   ;;((and (= h 0) (= num 0)) (create-space (+ *bar-horizontal-space* *bar-width* ))) ;; simulate space+bar, because: function is not called if the sum of all columns is less than 1. but the first column can be null, and the other does not. if the first does not draw (or simulate) the remaining columns will move and paint over the previous colonnade, and the total width of the graph is reduced to the width of the column plus the margin 
 
    (else (generate-grounded-bar (if (= num 0) *bar-horizontal-space* (- *bar-width*)) ;; x
 				(if (= num 0)                                         ;; y
-				    (- *half-graph-height* h)                                           ;; in
-				    0)  ;;  *bar-vertical-space* already added by generate-grounded-bar ;; out
+				    (- *half-graph-with-border-height* h)             ;; y in
+				    *bar-vertical-space*)                             ;; y out
 				*bar-width*                                           ;; w
 				h                                                     ;; h
-				(cond ((= num 0) *color-0*)  ;; system 
-				      ((= num 1) *color-1*)  ;; user
-				      ((= num 2) *color-2*)  ;; nice
-				      (else      *color-3*)))))) ;; fixme need more color
+				(cond ((= num 0) *color-0*)      ;; in
+				      (else      *color-1*)))))) ;; out
 
 
 
@@ -521,9 +546,9 @@
 	(cons (generate-splitted-particle-bar (car lst) num) (multi-bar (cdr lst) (+ num 1)))))
   
   (let* ((max-val (max (apply max (map (lambda (x) (apply max x)) x-list)))) ;; max from all
-	 (real-height (truncate (/ (- *graph-height* *bar-vertical-space*) 2)))
-	 (y-list (map (lambda (x) (func-scale x 0 max-val 0 real-height)) x-list))
+	 (y-list (map (lambda (x) (func-scale x 0 max-val 0 *real-height-splitted-bar*)) x-list))
 	 (z-list (map reverse y-list))) ;; painting is in the following order: first the lower column, and then the top. Because of this early to be out (tx) and then in (rx), or the need to turn in / out -> out / in before rendering
+
     (map (lambda (lst)
 	   (if (< (apply + lst) 1)
 	       (create-space (+ *bar-width* *bar-horizontal-space*)) ;; skip if zero hight of all bar
