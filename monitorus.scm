@@ -157,20 +157,20 @@
   
   (list make-static-info (string-append (set-y-zero-to-center) (add-color *color-3* "]-[eth0")))
   (list make-static-info (canvas *graph-width* *graph-height* *color-4*))
-  (list store-history eth0-stat diff-prepare truncate-scale-list generate-splitted-multi-bar (eth0-stat) (make-list *number-of-bar* (list 0 0)) *normal-refresh-time* '())
+  (list store-history eth0-stat diff-prepare procrustes-scale-list generate-splitted-multi-bar (eth0-stat) (make-list *number-of-bar* (list 0 0)) *normal-refresh-time* '())
   
   
   
   (list make-static-info (string-append (set-y-zero-to-center) (add-color *color-3* "]-[sda")))
   (list make-static-info (canvas *graph-width* *graph-height* *color-4*))
-  (list store-history sda-stat diff-prepare truncate-scale-list generate-splitted-multi-bar (sda-stat) (make-list *number-of-bar* (list 0 0)) *normal-refresh-time* '())
+  (list store-history sda-stat diff-prepare procrustes-scale-list generate-splitted-multi-bar (sda-stat) (make-list *number-of-bar* (list 0 0)) *normal-refresh-time* '())
   
   
   
   ;; disabled because usually do not use swap
   ;;(list make-static-info (string-append (set-y-zero-to-center) (add-color *color-3* "]-[swap")))
   ;;(list make-static-info (canvas *graph-width* *graph-height* *color-4*))
-  ;;(list store-history swap-stat diff-prepare truncate-scale-list generate-splitted-multi-bar (swap-stat) (make-list *number-of-bar* (list 0 0 0)) *normal-refresh-time* '())
+  ;;(list store-history swap-stat diff-prepare procrustes-scale-list generate-splitted-multi-bar (swap-stat) (make-list *number-of-bar* (list 0 0 0)) *normal-refresh-time* '())
   
   
   

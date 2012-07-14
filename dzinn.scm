@@ -439,7 +439,6 @@
 
 
 (define (fs-scale x in-max out-max)
-  ;; ignore in-min ->   0
   ;; ignore in-max -> 100
   (map (lambda (element) (truncate (scale-proportional element 100 out-max))) x))
 
@@ -466,6 +465,12 @@
   (round (scale-proportional x in-max out-max)))
 
 
+(define (procrustes-scale-list x in-max out-max)
+  ;; show small data always, idependent of scale
+  ;; Round the number x towards 1
+  (map (lambda (element) (let ((result (scale-proportional element in-max out-max)))
+			   (+ (truncate (- result 1)) 1)))
+       x))
 
 
 
@@ -478,7 +483,7 @@
    (cond ;; function is not called if the sum of all columns is less than 1. but the first column can be null, and the other does not. if the first does not draw (or simulate) the remaining columns will move and paint over the previous colonnade, and the total width of the graph is reduced to the width of the column plus the margin 
     ((and (= h 0) (> num 0))  "") ;; do not draw a small column
     ((and (= h 0) (= num 0)) *empty-bar*) ;; simulate space+bar, because: function is not called if the sum of all columns is less than 1. but the first column can be null, and the other does not. if the first does not draw (or simulate) the remaining columns will move and paint over the previous colonnade, and the total width of the graph is reduced to the width of the column plus the margin 
-
+    
     (else (generate-grounded-bar (if (= num 0) *bar-horizontal-space* (- *bar-width*)) ;; x
 				 prev-height                                           ;; y
 				 *bar-width*                                           ;; w
@@ -497,13 +502,11 @@
     (if (null? lst)
 	'()
 	(begin
-	  (let ((res-txt-shift (generate-incremental-particle-bar (car lst) previous-high num)))
-	    (cons (car res-txt-shift) (multi-bar (cdr lst) (cadr res-txt-shift) (+ num 1)))))))
-  
+	  (let ((res-txt-shift (generate-incremental-particle-bar (car lst) previous-high num))) ;; res-txt-shift: result === '(text shift)
+	    (cons (car res-txt-shift) (multi-bar (cdr lst) (cadr res-txt-shift) (+ num 1)))))))  
   (let* ((max-val (max (apply max (map (lambda (x) (apply + x)) x-list)))) ;; max increment
 	 (real-height (- *graph-height* (* *bar-vertical-space* (- (length (car (last-pair x-list))) 1)))) ;; 1#2#3 number of "#" === (- length 1) === 2 ;; fixme: need only count the distance between the non-zero columns (short columns are not shown), but the resultant height of the columns (especially the small columns), depends on the distance between the columns. Otherwise, the top will often be an empty space, even when wholly loaded, due to rounding error
 	 (y-list (map (lambda (x) (func-scale x max-val real-height)) x-list)))
-
 
     (map (lambda (lst)
 	   (if (< (apply + lst) 1)
