@@ -1,0 +1,55 @@
+README.org --- description
+
+
+
+Copyright (C) 2012 Roman V. Prikhodchenko
+
+
+
+Author: Roman V. Prikhodchenko <chujoii@gmail.com>
+
+
+
+  This file is part of monitorus.
+
+  monitorus is free software: you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  monitorus is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
+
+  You should have received a copy of the GNU General Public License
+  along with monitorus.  If not, see <http://www.gnu.org/licenses/>.
+
+
+
+* Keywords:
+  graph plot dzen monitoring system cpu net disk top process temperature sensor dzinn monutorus
+
+* Description:
+  provides a way for data to dzen
+  
+  preparation of data to draw beautiful graphics using dzen2
+
+* Usage:
+  nice -n 19 ./monitorus.scm | dzen2 -x 705 -y 0 -w 575 -h 21 -ta l -bg '#3f3f3f' -dock -fn "Mono:size=7" &
+
+
+
+* History:
+  Version 0.1 was created at 2012.may.30
+
+
+
+
+
+
+* TODO
+  1 reducing CPU usage
+  2 correct processing of the lack of network (nc produces an error, lo continues to work)
+  3 top shows a list of processes is not at the moment, but for all time the system
+  

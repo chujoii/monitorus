@@ -77,6 +77,13 @@
 
 (define *cpu-max-val* (* 100 *cpu-quantity*)) ;; if num-of-cpu=2 => max-cpu-val=200%     the final value is also dependent on the time of accumulation (see cpu-diff-prepare)
 
+
+(define *fs-graph-width* (+ (* (+ (* *font-horizontal-size* 7) *bar-horizontal-space* *bar-width* ) (length *list-fs*)) *bar-horizontal-space*))  ;; 7=(+ 1 5 1) 1=space 5=Available 1=fs-char ; fixme last *bar-horizontal-space* ??
+(define *top-horizontal-graph-width* (+ (* *font-horizontal-size* *ps-top-name-length* *ps-top-show*) (* *bar-horizontal-space* *ps-top-show*) *bar-horizontal-space*)) ;; fixme (+ ... *bar-horizontal-space*) very strange
+(define *top-vertical-graph-width* (+ (* *font-horizontal-size* *ps-top-name-length*) (* *bar-horizontal-space* *ps-top-show*) *bar-horizontal-space*)) ;; fixme (+ ... *bar-horizontal-space*) very strange
+(define *mem-graph-width* (+ (* *bar-width* 2) (* (+ *bar-horizontal-space* *element-horizontal-space*) 3)))
+(define *thermo-graph-width* (+ (* (+ (* *font-horizontal-size* 2) *bar-width* *bar-horizontal-space*) (length *list-thermal*)) *bar-horizontal-space*)) ;; fixme (+ ... *bar-horizontal-space*) very strange
+
 (define *real-height-splitted-bar* (truncate (/ (- *graph-height* *bar-vertical-space*) 2)))
 (define *half-graph-with-border-height* (+ *real-height-splitted-bar* *vertical-border*))
 
@@ -103,7 +110,7 @@
 		 (generate-grounded-bar 0 *vertical-border* width height color)
 		 (format #f "^p(-~d)" width)))
 
-(define (set-y-zero-to-bottom) ;; fixme need example
+(define (set-y-zero-to-bottom)
   ;; command ^p(_BOTTOM) adds 3 pixels between the elements
   ;; example: between red and green rectangle 3 pixels, between green and blue rectangle 0 pixels
   ;;  echo "^p()^fg(#FF0000)^r(10x19+0+0)^p(_BOTTOM)^fg(#00FF00)^r(10x19+0-20)^p()^fg(#0000FF)^r(10x19+0+0)"| dzen2 -h 21 -p
@@ -191,7 +198,7 @@
 	   (set-lock-x))
 	  (top-generator (car x-list) '())
 	  (list (set-unlock-x)
-		(create-space (+ (* *font-horizontal-size* *ps-top-name-length*) (* *bar-horizontal-space* *ps-top-show*) *bar-horizontal-space*)))))
+		(create-space *top-vertical-graph-width*))))
 
 
 
@@ -369,10 +376,10 @@
 
 
 (define (eth0-stat) ;; fixme need to use wlan0, ...
-  ;; return (in out)
+  ;; return (out in) ;; creating is in the following order: first the lower column, and then the top. Because of this early to be out (tx) and then in (rx), or the need to turn in / out -> out / in before rendering
   (list (runtime)
-	(car (map string->number (map match:substring (list-matches "[0-9]+" (first-line-of-file "/sys/class/net/eth0/statistics/rx_bytes")))))   ;; rx
-	(car (map string->number (map match:substring (list-matches "[0-9]+" (first-line-of-file "/sys/class/net/eth0/statistics/tx_bytes"))))))) ;; tx
+	(car (map string->number (map match:substring (list-matches "[0-9]+" (first-line-of-file "/sys/class/net/eth0/statistics/tx_bytes")))))   ;; tx
+	(car (map string->number (map match:substring (list-matches "[0-9]+" (first-line-of-file "/sys/class/net/eth0/statistics/rx_bytes"))))))) ;; rx
 
 
 
@@ -387,12 +394,12 @@
 (define (sda-stat) ;; fixme need to use ALL disk
   ;; /usr/src/linux/Documentation/ABI/testing/procfs-diskstats
   (let ((sda (map string->number (map match:substring (list-matches "[^ ]+" (search-first-string-in-list (read-lines-list "/proc/diskstats") *disk-sda*))))))
-    (list (runtime) (list-ref sda 3) (list-ref sda 7))))
+    (list (runtime) (list-ref sda 7) (list-ref sda 3))))
 
 
 (define (swap-stat) ;; fixme: to automatically determine the partition (file?) swap
   (let ((swap (map string->number (map match:substring (list-matches "[^ ]+" (search-first-string-in-list (read-lines-list "/proc/diskstats") *disk-swap*))))))
-    (list (runtime) (list-ref swap 5) (list-ref swap 9))))
+    (list (runtime) (list-ref swap 9) (list-ref swap 5))))
 
 
 
@@ -549,14 +556,13 @@
 	(cons (generate-splitted-particle-bar (car lst) num) (multi-bar (cdr lst) (+ num 1)))))
   
   (let* ((max-val (max (apply max (map (lambda (x) (apply max x)) x-list)))) ;; max from all
-	 (y-list (map (lambda (x) (func-scale x max-val *real-height-splitted-bar*)) x-list))
-	 (z-list (map reverse y-list))) ;; painting is in the following order: first the lower column, and then the top. Because of this early to be out (tx) and then in (rx), or the need to turn in / out -> out / in before rendering
-
+	 (y-list (map (lambda (x) (func-scale x max-val *real-height-splitted-bar*)) x-list)))
+	 
     (map (lambda (lst)
 	   (if (< (apply + lst) 1)
 	       *empty-bar* ;; skip if zero hight of all bar
 	       (string-append (set-y-zero-to-bottom) (string-join (multi-bar lst 0) ""))))
-	 z-list)))
+	 y-list)))
 
 
 
@@ -618,7 +624,6 @@
 
 
 (define (make-static-info str)
-  ;;(list (set-y-zero-to-center) ;;  fixme
   (format #t "~a" str)
   (list make-static-info str))
 

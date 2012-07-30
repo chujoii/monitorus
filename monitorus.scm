@@ -176,33 +176,33 @@
   
   ;; ============================== danger! eat cpu
   (list make-static-info (string-append (set-y-zero-to-center) (add-color *color-3* "]-[fs")))
-  (list make-static-info (canvas (+ (* (+ (* *font-horizontal-size* 7) *bar-horizontal-space* *bar-width* ) (length *list-fs*)) *bar-horizontal-space*) *graph-height* *color-4*))  ;; 7=(+ 1 5 1) 1=space 5=Available 1=fs-char ; fixme last *bar-horizontal-space* ??
+  (list make-static-info (canvas *fs-graph-width* *graph-height* *color-4*))
   (list store-history fs-stat no-diff-prepare fs-scale fs-draw (fs-stat) (list (cdr (fs-stat))) *slow-refresh-time* '())
   
   
   
   ;; ============================== danger! eat cpu
   ;(list make-static-info (string-append (set-y-zero-to-center) (add-color *color-3* "]-[top")))
-  ;(list make-static-info (canvas (+ (* *font-horizontal-size* *ps-top-name-length* *ps-top-show*) (* *bar-horizontal-space* *ps-top-show*) *bar-horizontal-space*) *graph-height* *color-4*)) ;; fixme (+ ... *bar-horizontal-space*) very strange
+  ;(list make-static-info (canvas *top-horizontal-graph-width* *graph-height* *color-4*))
   ;(list store-history top-stat no-diff-prepare truncate-scale-list top-horizontal-draw (top-stat) (list (cdr (top-stat))) *slow-refresh-time* '())
   ;;
   ;; or
   ;;
   ;; ============================== danger! eat cpu
   (list make-static-info (string-append (set-y-zero-to-center) (add-color *color-3* "]-[top")))
-  (list make-static-info (canvas (+ (* *font-horizontal-size* *ps-top-name-length*) (* *bar-horizontal-space* *ps-top-show*) *bar-horizontal-space*) *graph-height* *color-4*)) ;; fixme (+ ... *bar-horizontal-space*) very strange
+  (list make-static-info (canvas *top-vertical-graph-width* *graph-height* *color-4*))
   (list store-history top-stat no-diff-prepare truncate-scale-list top-vertical-draw (top-stat) (list (cdr (top-stat))) *slow-refresh-time* '())
   
   
   
   (list make-static-info (string-append (set-y-zero-to-center) (add-color *color-3* "]-[mem")))
-  (list make-static-info (canvas (+ (* *bar-width* 2) (* (+ *bar-horizontal-space* *element-horizontal-space*) 3)) *graph-height* *color-4*))
+  (list make-static-info (canvas *mem-graph-width* *graph-height* *color-4*))
   (list store-history mem-stat no-diff-prepare truncate-scale-list mem-draw (mem-stat) (list (cdr (mem-stat))) *normal-refresh-time* '())
   
   
   
   (list make-static-info (string-append (set-y-zero-to-center) (add-color *color-3* "]-[t")))
-  (list make-static-info (canvas (+ (* (+ (* *font-horizontal-size* 2) *bar-width* *bar-horizontal-space*) (length *list-thermal*)) *bar-horizontal-space*) *graph-height* *color-4*)) ;; fixme (+ ... *bar-horizontal-space*) very strange
+  (list make-static-info (canvas *thermo-graph-width* *graph-height* *color-4*))
   (list store-history thermo-stat no-diff-prepare round-scale thermo-draw (thermo-stat) (list (cdr (thermo-stat))) *normal-refresh-time* '())
   
   
