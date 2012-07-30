@@ -48,6 +48,12 @@ Author: Roman V. Prikhodchenko <chujoii@gmail.com>
 
 
 
+* Dependences:
+  
+  guile (GNU Guile) 2.0.4 or later. (need check guile 1.8)
+  
+  battery-scheme: https://github.com/chujoii/battery-scheme
+
 * TODO
   1 reducing CPU usage
   2 correct processing of the lack of network (nc produces an error, lo continues to work)
