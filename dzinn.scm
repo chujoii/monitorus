@@ -305,7 +305,11 @@
 
 
 
-
+(define (hddtemp x)
+  (let ((temperature (list-ref (string-split (car (nc "127.0.0.1" 7634)) #\|) (car x))))
+    (if (string=? temperature "SLP") ;; sleep mode ON
+	"0"
+	temperature)))
 
 (define (thermo-stat)
   ;;  (string-split (system-with-output-to-string "cat /sys/devices/platform/coretemp.*/temp*_input /sys/class/thermal/thermal_zone*/temp") #\newline));; this command call "shell" and "cat" evry refresh
@@ -316,7 +320,7 @@
   ;; result === (... (t permissible_limit maximum_limit) ...)
   (cons (runtime)
 	(map (lambda (x) (list (round (/ (string->number (if (number? (car x))
-							     (list-ref (string-split (car (nc "127.0.0.1" 7634)) #\|) (car x))
+							     (hddtemp x)
 							     (first-line-of-file (car x))))
 					 (cadr x)))
 			       (caddr x)
