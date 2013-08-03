@@ -59,10 +59,10 @@
 (load "../battery-scheme/netcat.scm")
 (load "../battery-scheme/minimax.scm")
 (load "../battery-scheme/time.scm")
-
+(load "../battery-scheme/flat-list.scm")
 
 (define *stdout* (current-output-port))
-(define *stderr* (current-error-port))
+(define *stderr* (current-error-port)) ;;   (display "test" *stderr*)
 
 
 
@@ -153,8 +153,19 @@
 (define (top-stat)
   ;; fixme: probably better to use a different algorithm http://forums.anandtech.com/showthread.php?t=297729
   ;; fixme (if (< pcpu *ps-top-above*) (format #f "^p(~d)~a" *bar-horizontal-space* (make-string *ps-top-name-length* #\space)) ;; ^p(+1) because (generate-grounded-bar *bar-horizontal-space* ...) also add space
+
+  ;;(display (list-head (map match:substring (list-matches "[^ \n]+" (system-with-output-to-string "ps --no-headers -A -o pcpu,comm --sort=-pcpu" ))) (* 2 *ps-top-show*)) *stderr*)
+
   (cons (runtime)
-	(list-head (map match:substring (list-matches "[^ \n]+" (system-with-output-to-string "ps --no-headers -A -o pcpu,comm --sort=-pcpu" ))) (* 2 *ps-top-show*))))
+	(2d-1d
+	 (map (lambda (x) (list-head (map match:substring (list-matches "[^ ]+" x))2))
+	      (list-head (map match:substring (list-matches "[^\n]+"
+							    (system-with-output-to-string "ps --no-headers -A -o pcpu,comm --sort=-pcpu" )))
+			 *ps-top-show*)))))
+
+
+
+
 
 
 (define (top-horizontal-draw func-scale x-list)
@@ -307,7 +318,8 @@
 
 (define (hddtemp x)
   (let ((temperature (list-ref (string-split (car (nc "127.0.0.1" 7634)) #\|) (car x))))
-    (if (string=? temperature "SLP") ;; sleep mode ON
+    (if (or (string=? temperature "SLP") ;; sleep mode ON
+	    (string=? temperature "UNK"))
 	"0"
 	temperature)))
 
